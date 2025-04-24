@@ -26,7 +26,7 @@ func main() {
 func run() error {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			shortenUrlHandler(w, r)
+			shortenURLHandler(w, r)
 		} else {
 			redirectHandler(w, r)
 		}
@@ -36,14 +36,14 @@ func run() error {
 	return http.ListenAndServe(":8080", nil)
 }
 
-func shortenUrlHandler(w http.ResponseWriter, r *http.Request) {
+func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		// разрешаем только POST-запросы
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	if r.Header.Get("Content-Type") != `text/plain` {
+	if r.Header.Get("Content-Type") != `text/plain charset=UTF-8` {
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 		return
 	}
@@ -63,7 +63,7 @@ func shortenUrlHandler(w http.ResponseWriter, r *http.Request) {
 
 	shortURL = fmt.Sprintf("http://localhost:8080/%s", shortURL)
 
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "text/plain charset=UTF-8")
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprintf(w, "201 Created\n%s", shortURL)
 }
@@ -84,7 +84,7 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "text/plain charset=UTF-8")
 	w.WriteHeader(http.StatusTemporaryRedirect)
 	fmt.Fprintf(w, "307 Temporary Redirect\n%s", originalURL)
 }
