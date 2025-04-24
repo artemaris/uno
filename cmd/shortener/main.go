@@ -65,7 +65,7 @@ func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, "201 Created\n%s", shortURL)
+	fmt.Fprintf(w, shortURL)
 }
 
 func redirectHandler(w http.ResponseWriter, r *http.Request) {
@@ -86,5 +86,5 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusTemporaryRedirect)
-	fmt.Fprintf(w, "307 Temporary Redirect\n%s", originalURL)
+	fmt.Fprintf(w, originalURL)
 }
