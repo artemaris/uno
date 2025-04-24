@@ -53,30 +53,30 @@ func shortenUrlHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	longUrl := string(body)
+	longURL := string(body)
 
-	hash := md5.Sum([]byte(longUrl))
-	shortUrl := hex.EncodeToString(hash[:])[:6]
+	hash := md5.Sum([]byte(longURL))
+	shortURL := hex.EncodeToString(hash[:])[:6]
 	mu.Lock()
-	urlToStore[shortUrl] = longUrl
+	urlToStore[shortURL] = longURL
 	mu.Unlock()
 
-	shortUrl = fmt.Sprintf("http://localhost:8080/%s", shortUrl)
+	shortURL = fmt.Sprintf("http://localhost:8080/%s", shortURL)
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, "201 Created\n%s", shortUrl)
+	fmt.Fprintf(w, "201 Created\n%s", shortURL)
 }
 
 func redirectHandler(w http.ResponseWriter, r *http.Request) {
-	shortUrl := strings.TrimPrefix(r.URL.Path, "/")
-	if shortUrl == "" {
+	shortURL := strings.TrimPrefix(r.URL.Path, "/")
+	if shortURL == "" {
 		http.NotFound(w, r)
 		return
 	}
 
 	mu.Lock()
-	originalUrl, ok := urlToStore[shortUrl]
+	originalURL, ok := urlToStore[shortURL]
 	mu.Unlock()
 
 	if !ok {
@@ -86,5 +86,5 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusTemporaryRedirect)
-	fmt.Fprintf(w, "307 Temporary Redirect\n%s", originalUrl)
+	fmt.Fprintf(w, "307 Temporary Redirect\n%s", originalURL)
 }
