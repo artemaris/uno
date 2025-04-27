@@ -49,7 +49,7 @@ func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
-	_, err = fmt.Fprintln(w, shortURL)
+	_, err = fmt.Fprint(w, shortURL)
 	if err != nil {
 		return
 	}
