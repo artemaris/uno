@@ -20,31 +20,26 @@ func TestShortenAndRedirect(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	resp := rec.Result()
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			t.Errorf("Failed to close response body: %v", err)
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("expected status code %d, got %d", http.StatusCreated, resp.StatusCode)
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
+		t.Fatalf("failed to read body: %v", err)
 	}
 
 	shortURL := strings.TrimSpace(string(body))
 
 	if !strings.HasPrefix(shortURL, baseURL) {
-		t.Fatalf("shortened URL does not start with baseURL: got %q, want prefix %q", shortURL, baseURL)
+		t.Fatalf("short URL does not start with baseURL: got %q, want prefix %q", shortURL, baseURL)
 	}
 
 	id := strings.TrimPrefix(shortURL, baseURL)
 	if id == "" {
-		t.Fatal("shortened URL does not have an ID")
+		t.Fatal("short ID is empty")
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/"+id, nil)
@@ -56,11 +51,11 @@ func TestShortenAndRedirect(t *testing.T) {
 	defer getResp.Body.Close()
 
 	if getResp.StatusCode != http.StatusTemporaryRedirect {
-		t.Fatalf("expected status code %d, got %d", http.StatusTemporaryRedirect, getResp.StatusCode)
+		t.Fatalf("expected status %d, got %d", http.StatusTemporaryRedirect, getResp.StatusCode)
 	}
 
 	location := getResp.Header.Get("Location")
 	if location != originalURL {
-		t.Fatalf("expected location header %q, got %q", originalURL, location)
+		t.Fatalf("expected Location header %q, got %q", originalURL, location)
 	}
 }
