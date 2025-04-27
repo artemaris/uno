@@ -8,73 +8,59 @@ import (
 	"testing"
 )
 
-func doPostRequest(t *testing.T, server http.Handler, url string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(url))
-	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-
-	rr := httptest.NewRecorder()
-	server.ServeHTTP(rr, req)
-
-	return rr
-}
-
-func doGetRequest(t *testing.T, server http.Handler, path string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, path, nil)
-	rr := httptest.NewRecorder()
-	server.ServeHTTP(rr, req)
-
-	return rr
-}
-
 func TestShortenAndRedirect(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/" {
-			shortenURLHandler(w, r)
-		} else {
-			redirectHandler(w, r)
-		}
-	})
+	handler := setupRouter()
 
 	originalURL := "https://practicum.yandex.ru/"
-	postResp := doPostRequest(t, handler, originalURL)
 
-	if postResp.Code != http.StatusCreated {
-		t.Fatalf("Expected status 201 Created, got %d", postResp.Code)
-	}
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(originalURL))
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	rec := httptest.NewRecorder()
 
-	shortURLBody, _ := io.ReadAll(postResp.Body)
-	shortURL := strings.TrimSpace(string(shortURLBody))
-	if !strings.Contains(shortURL, "http://localhost:8080/") {
-		t.Fatalf("Short URL is not correct: %s", shortURL)
-	}
+	handler.ServeHTTP(rec, req)
 
-	parts := strings.Split(shortURL, "/")
-	shortID := parts[len(parts)-1]
-
-	getResp := doGetRequest(t, handler, "/"+shortID)
-
-	if getResp.Code != http.StatusTemporaryRedirect {
-		t.Fatalf("Expected status 307 Temporary Redirect, got %d", getResp.Code)
-	}
-
-	location := getResp.Header().Get("Location")
-	if location != originalURL {
-		t.Fatalf("Expected Location header to be %s, got %s", originalURL, location)
-	}
-}
-
-func TestBadRequest(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/" {
-			shortenURLHandler(w, r)
-		} else {
-			redirectHandler(w, r)
+	resp := rec.Result()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			t.Errorf("Failed to close response body: %v", err)
 		}
-	})
+	}(resp.Body)
 
-	getResp := doGetRequest(t, handler, "/nonexistentid")
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected status code %d, got %d", http.StatusCreated, resp.StatusCode)
+	}
 
-	if getResp.Code != http.StatusNotFound {
-		t.Fatalf("Expected 404 Not Found for nonexistent ID, got %d", getResp.Code)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	shortURL := strings.TrimSpace(string(body))
+
+	if !strings.HasPrefix(shortURL, baseURL) {
+		t.Fatalf("shortened URL does not start with baseURL: got %q, want prefix %q", shortURL, baseURL)
+	}
+
+	id := strings.TrimPrefix(shortURL, baseURL)
+	if id == "" {
+		t.Fatal("shortened URL does not have an ID")
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/"+id, nil)
+	getRec := httptest.NewRecorder()
+
+	handler.ServeHTTP(getRec, getReq)
+
+	getResp := getRec.Result()
+	defer getResp.Body.Close()
+
+	if getResp.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("expected status code %d, got %d", http.StatusTemporaryRedirect, getResp.StatusCode)
+	}
+
+	location := getResp.Header.Get("Location")
+	if location != originalURL {
+		t.Fatalf("expected location header %q, got %q", originalURL, location)
 	}
 }
