@@ -1,91 +1,75 @@
 package main
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
-	"sync"
+
+	"github.com/go-chi/chi/v5"
 )
 
-var (
-	urlToStore = make(map[string]string)
-	mu         sync.Mutex
-)
+var urlToStore = make(map[string]string)
+var baseURL = "http://localhost:8080/"
 
-// функция main вызывается автоматически при запуске приложения
 func main() {
-	if err := run(); err != nil {
-		panic(err)
-	}
+	http.ListenAndServe(":8080", setupRouter())
 }
 
-// функция run будет полезна при инициализации зависимостей сервера перед запуском
-func run() error {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			shortenURLHandler(w, r)
-		} else {
-			redirectHandler(w, r)
-		}
-
-	})
-	fmt.Println("Listening on port 8080")
-	return http.ListenAndServe(":8080", nil)
+func setupRouter() http.Handler {
+	r := chi.NewRouter()
+	r.Post("/", shortenURLHandler)
+	r.Get("/{id}", redirectHandler)
+	return r
 }
 
 func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		// разрешаем только POST-запросы
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	if r.Header.Get("Content-Type") != `text/plain; charset=utf-8` {
-		w.WriteHeader(http.StatusUnsupportedMediaType)
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "text/plain; charset=utf-8" {
+		http.Error(w, "Unsupported Content-Type", http.StatusUnsupportedMediaType)
 		return
 	}
 
 	body, err := io.ReadAll(r.Body)
-	if err != nil || len(body) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
-	longURL := strings.TrimSpace(string(body))
+	originalURL := strings.TrimSpace(string(body))
 
-	hash := md5.Sum([]byte(longURL))
-	shortURL := hex.EncodeToString(hash[:])[:6]
-	mu.Lock()
-	urlToStore[shortURL] = longURL
-	mu.Unlock()
+	if !strings.HasPrefix(originalURL, "http://") && !strings.HasPrefix(originalURL, "https://") {
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
+		return
+	}
 
-	shortURLPrint := fmt.Sprintf("http://localhost:8080/%s", shortURL)
+	shortID := generateShortID(originalURL)
+	urlToStore[shortID] = originalURL
+
+	shortURL := baseURL + shortID
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprint(w, shortURLPrint)
+	_, err = fmt.Fprint(w, shortURL)
+	if err != nil {
+		return
+	}
 }
 
 func redirectHandler(w http.ResponseWriter, r *http.Request) {
-	shortURL := strings.TrimPrefix(r.URL.Path, "/")
-	if shortURL == "" {
-		http.NotFound(w, r)
-		return
-	}
-
-	mu.Lock()
-	originalURL, ok := urlToStore[shortURL]
-	mu.Unlock()
-
+	shortID := chi.URLParam(r, "id")
+	originalURL, ok := urlToStore[shortID]
 	if !ok {
-		http.NotFound(w, r)
+		http.Error(w, "Short URL not found", http.StatusBadRequest)
 		return
 	}
 
 	w.Header().Set("Location", originalURL)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusTemporaryRedirect)
-	fmt.Fprint(w, originalURL)
+}
+
+func generateShortID(url string) string {
+	if len(url) < 6 {
+		return fmt.Sprintf("%x", len(url))
+	}
+	return fmt.Sprintf("%x", url[:6])
 }
