@@ -3,63 +3,70 @@ package main
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
+
+	"uno/cmd/shortener/config"
 
 	"github.com/go-chi/chi/v5"
 )
 
-var urlToStore = make(map[string]string)
-var baseURL = "http://localhost:8080/"
+var urlStore = make(map[string]string)
+
+const idLength = 8
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func main() {
-	http.ListenAndServe(":8080", setupRouter())
-}
+	cfg := config.NewConfig()
 
-func setupRouter() http.Handler {
 	r := chi.NewRouter()
-	r.Post("/", shortenURLHandler)
+	r.Post("/", shortenURLHandler(cfg))
 	r.Get("/{id}", redirectHandler)
-	return r
+
+	srv := &http.Server{
+		Addr:    cfg.Address,
+		Handler: r,
+	}
+
+	fmt.Println("Starting server on", cfg.Address)
+	if err := srv.ListenAndServe(); err != nil {
+		panic(err)
+	}
 }
 
-func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "text/plain; charset=utf-8" {
-		http.Error(w, "Unsupported Content-Type", http.StatusUnsupportedMediaType)
-		return
-	}
+func shortenURLHandler(cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+			http.Error(w, "unsupported Content-Type", http.StatusUnsupportedMediaType)
+			return
+		}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
-		return
-	}
-	originalURL := strings.TrimSpace(string(body))
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read body", http.StatusBadRequest)
+			return
+		}
+		originalURL := strings.TrimSpace(string(body))
+		if originalURL == "" {
+			http.Error(w, "empty URL", http.StatusBadRequest)
+			return
+		}
 
-	if !strings.HasPrefix(originalURL, "http://") && !strings.HasPrefix(originalURL, "https://") {
-		http.Error(w, "Invalid URL", http.StatusBadRequest)
-		return
-	}
+		shortID := generateShortID()
+		urlStore[shortID] = originalURL
 
-	shortID := generateShortID(originalURL)
-	urlToStore[shortID] = originalURL
-
-	shortURL := baseURL + shortID
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusCreated)
-	_, err = fmt.Fprint(w, shortURL)
-	if err != nil {
-		return
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, cfg.BaseURL+"/"+shortID)
 	}
 }
 
 func redirectHandler(w http.ResponseWriter, r *http.Request) {
 	shortID := chi.URLParam(r, "id")
-	originalURL, ok := urlToStore[shortID]
+	originalURL, ok := urlStore[shortID]
 	if !ok {
-		http.Error(w, "Short URL not found", http.StatusBadRequest)
+		http.Error(w, "URL not found", http.StatusBadRequest)
 		return
 	}
 
@@ -67,9 +74,11 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func generateShortID(url string) string {
-	if len(url) < 6 {
-		return fmt.Sprintf("%x", len(url))
+func generateShortID() string {
+	rand.NewSource(time.Now().UnixNano())
+	id := make([]byte, idLength)
+	for i := range id {
+		id[i] = charset[rand.Intn(len(charset))]
 	}
-	return fmt.Sprintf("%x", url[:6])
+	return string(id)
 }
