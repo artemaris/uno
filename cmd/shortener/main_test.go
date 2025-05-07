@@ -5,16 +5,17 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"uno/cmd/shortener/storage"
 
 	"uno/cmd/shortener/config"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func setupRouter(cfg *config.Config) http.Handler {
+func setupRouter(cfg *config.Config, store storage.Storage) http.Handler {
 	r := chi.NewRouter()
-	r.Post("/", shortenURLHandler(cfg))
-	r.Get("/{id}", redirectHandler)
+	r.Post("/", shortenURLHandler(cfg, store))
+	r.Get("/{id}", redirectHandler(store))
 	return r
 }
 
@@ -23,7 +24,8 @@ func TestShortenAndRedirect(t *testing.T) {
 		Address: "localhost:8080",
 		BaseURL: "http://localhost:8080",
 	}
-	handler := setupRouter(cfg)
+	store := storage.NewInMemoryStorage()
+	handler := setupRouter(cfg, store)
 
 	reqBody := "https://practicum.yandex.ru/"
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
@@ -55,5 +57,22 @@ func TestShortenAndRedirect(t *testing.T) {
 	location := getResp.Header().Get("Location")
 	if location != reqBody {
 		t.Fatalf("expected redirect to %s, got %s", reqBody, location)
+	}
+
+	reqEmpty := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	reqEmpty.Header.Set("Content-Type", "text/plain")
+	respEmpty := httptest.NewRecorder()
+	handler.ServeHTTP(respEmpty, reqEmpty)
+
+	if respEmpty.Code != http.StatusBadRequest {
+		t.Fatalf("empty body: expected %d, got %d", http.StatusBadRequest, respEmpty.Code)
+	}
+
+	reqNonexist := httptest.NewRequest(http.MethodGet, "/unknown123", nil)
+	respNonexist := httptest.NewRecorder()
+	handler.ServeHTTP(respNonexist, reqNonexist)
+
+	if respNonexist.Code != http.StatusBadRequest {
+		t.Fatalf("non-existent ID: expected %d, got %d", http.StatusBadRequest, respNonexist.Code)
 	}
 }

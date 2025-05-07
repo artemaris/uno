@@ -4,14 +4,17 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 )
 
+const defaultBaseURL = "http://localhost:8080/"
+
 func main() {
-	endpoint := "http://localhost:8080/"
+	endpoint := defaultBaseURL
 	// контейнер данных для запроса
 	data := url.Values{}
 	// приглашение в консоли
@@ -21,7 +24,7 @@ func main() {
 	// читаем строку из консоли
 	long, err := reader.ReadString('\n')
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	long = strings.TrimSuffix(long, "\n")
 	// заполняем контейнер данными
@@ -33,22 +36,27 @@ func main() {
 	// тело должно быть источником потокового чтения io.Reader
 	request, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(data.Encode()))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	// в заголовках запроса указываем кодировку
 	request.Header.Add("Content-Type", "text/plain; charset=utf-8")
 	// отправляем запрос и получаем ответ
 	response, err := client.Do(request)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	// выводим код ответа
 	fmt.Println("Статус-код ", response.Status)
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(response.Body)
 	// читаем поток из тела ответа
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	// и печатаем его
 	fmt.Println(string(body))

@@ -5,15 +5,17 @@ import (
 	"os"
 )
 
+const (
+	defaultAddress = "localhost:8080"
+	defaultBaseURL = "http://localhost:8080"
+)
+
 type Config struct {
 	Address string
 	BaseURL string
 }
 
 func NewConfig() *Config {
-	defaultAddress := "localhost:8080"
-	defaultBaseURL := "http://localhost:8080"
-
 	addressFlag := flag.String("a", defaultAddress, "http service address")
 	baseURLFlag := flag.String("b", defaultBaseURL, "http base url")
 	flag.Parse()
