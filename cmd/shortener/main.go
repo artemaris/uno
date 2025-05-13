@@ -7,17 +7,27 @@ import (
 	"net/http"
 	"strings"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
 	"uno/cmd/shortener/utils"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg := config.NewConfig()
 	store := storage.NewInMemoryStorage()
 
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Could not initialize zap logger: %v", err)
+	}
+	defer logger.Sync()
+
 	r := chi.NewRouter()
+	r.Use(middleware.LoggingMiddleware(logger))
+
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
 
