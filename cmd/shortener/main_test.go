@@ -15,6 +15,7 @@ import (
 func setupRouter(cfg *config.Config, store storage.Storage) http.Handler {
 	r := chi.NewRouter()
 	r.Post("/", shortenURLHandler(cfg, store))
+	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
 	return r
 }
@@ -74,5 +75,25 @@ func TestShortenAndRedirect(t *testing.T) {
 
 	if respNonexist.Code != http.StatusBadRequest {
 		t.Fatalf("non-existent ID: expected %d, got %d", http.StatusBadRequest, respNonexist.Code)
+	}
+}
+
+func TestAPIShortenHandler(t *testing.T) {
+	cfg := &config.Config{
+		Address: "localhost:8080",
+		BaseURL: "http://localhost:8080",
+	}
+	store := storage.NewInMemoryStorage()
+	handler := setupRouter(cfg, store)
+
+	body := `{"url":"https://example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", resp.Code)
 	}
 }
