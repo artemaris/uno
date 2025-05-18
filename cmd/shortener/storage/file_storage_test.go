@@ -8,12 +8,7 @@ import (
 
 func TestFileStorage_SaveAndGet(t *testing.T) {
 	testFile := "test_storage.jsonl"
-	defer func(name string) {
-		err := os.Remove(name)
-		if err != nil {
-
-		}
-	}(testFile)
+	defer os.Remove(testFile)
 
 	store, err := NewFileStorage(testFile)
 	if err != nil {
