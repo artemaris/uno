@@ -6,18 +6,21 @@ import (
 )
 
 const (
-	defaultAddress = "localhost:8080"
-	defaultBaseURL = "http://localhost:8080"
+	defaultAddress     = "localhost:8080"
+	defaultBaseURL     = "http://localhost:8080"
+	defaultStoragePath = "data/storage.jsonl"
 )
 
 type Config struct {
-	Address string
-	BaseURL string
+	Address         string
+	BaseURL         string
+	FileStoragePath string
 }
 
 func NewConfig() *Config {
 	addressFlag := flag.String("a", defaultAddress, "http service address")
 	baseURLFlag := flag.String("b", defaultBaseURL, "http base url")
+	filePathFlag := flag.String("f", defaultStoragePath, "storage path")
 	flag.Parse()
 
 	addr := os.Getenv("SERVER_ADDRESS")
@@ -30,8 +33,14 @@ func NewConfig() *Config {
 		baseURL = *baseURLFlag
 	}
 
+	fileStorage := os.Getenv("FILE_STORAGE_PATH")
+	if fileStorage == "" {
+		fileStorage = *filePathFlag
+	}
+
 	return &Config{
-		Address: addr,
-		BaseURL: baseURL,
+		Address:         addr,
+		BaseURL:         baseURL,
+		FileStoragePath: fileStorage,
 	}
 }
