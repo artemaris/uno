@@ -27,6 +27,8 @@ func main() {
 	defer logger.Sync()
 
 	r := chi.NewRouter()
+
+	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.LoggingMiddleware(logger))
 
 	r.Post("/", shortenURLHandler(cfg, store))
