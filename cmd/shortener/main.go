@@ -18,7 +18,13 @@ import (
 
 func main() {
 	cfg := config.NewConfig()
-	store := storage.NewInMemoryStorage()
+
+	var store storage.Storage
+	s, err := storage.NewFileStorage(cfg.FileStoragePath)
+	if err != nil {
+		log.Fatalf("failed to create file storage: %v", err)
+	}
+	store = s
 
 	logger, err := zap.NewProduction()
 	if err != nil {
