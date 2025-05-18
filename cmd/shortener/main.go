@@ -24,12 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not initialize zap logger: %v", err)
 	}
-	defer func(logger *zap.Logger) {
-		err := logger.Sync()
-		if err != nil {
-
-		}
-	}(logger)
+	defer logger.Sync()
 
 	r := chi.NewRouter()
 	r.Use(middleware.LoggingMiddleware(logger))
