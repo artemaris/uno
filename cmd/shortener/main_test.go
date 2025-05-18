@@ -96,4 +96,12 @@ func TestAPIShortenHandler(t *testing.T) {
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("expected status 201, got %d", resp.Code)
 	}
+
+	reqBad := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(`{}`))
+	reqBad.Header.Set("Content-Type", "application/json")
+	respBad := httptest.NewRecorder()
+	handler.ServeHTTP(respBad, reqBad)
+	if respBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty input, got %d", respBad.Code)
+	}
 }

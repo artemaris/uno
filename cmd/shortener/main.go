@@ -24,11 +24,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not initialize zap logger: %v", err)
 	}
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		err := logger.Sync()
+		if err != nil {
+
+		}
+	}(logger)
 
 	r := chi.NewRouter()
 	r.Use(middleware.LoggingMiddleware(logger))
 
+	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
 
