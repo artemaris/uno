@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/db"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
@@ -19,12 +23,14 @@ import (
 func main() {
 	cfg := config.NewConfig()
 
-	var store storage.Storage
-	s, err := storage.NewFileStorage(cfg.FileStoragePath)
-	if err != nil {
-		log.Fatalf("failed to create file storage: %v", err)
+	var conn *pgx.Conn
+	if cfg.DatabaseDSN != "" {
+		var err error
+		conn, err = db.NewPG(cfg.DatabaseDSN)
+		if err != nil {
+			log.Fatalf("DB connection failed: %v", err)
+		}
 	}
-	store = s
 
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -36,6 +42,26 @@ func main() {
 
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.LoggingMiddleware(logger))
+
+	r.Get("/ping", pingHandler(conn))
+
+	var store storage.Storage
+	if conn != nil {
+		store, err = storage.NewPostgresStorage(conn)
+		if err != nil {
+			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
+		}
+	} else {
+		if cfg.FileStoragePath != "" {
+			s, err := storage.NewFileStorage(cfg.FileStoragePath)
+			if err == nil {
+				store = s
+			}
+		}
+		if store == nil {
+			store = storage.NewInMemoryStorage()
+		}
+	}
 
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
@@ -50,6 +76,8 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
+
+	defer conn.Close(context.Background())
 }
 
 func shortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
@@ -117,5 +145,24 @@ func apiShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 		} else {
 			w.Write(data)
 		}
+	}
+}
+
+func pingHandler(conn *pgx.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if conn == nil {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+
+		if err := conn.Ping(ctx); err != nil {
+			http.Error(w, "database connection failed", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
 	}
 }
