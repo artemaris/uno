@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/db"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
@@ -18,6 +22,12 @@ import (
 
 func main() {
 	cfg := config.NewConfig()
+
+	conn, err := db.NewPG(cfg.DatabaseDSN)
+	if err != nil {
+		log.Fatalf("DB connection failed: %v", err)
+	}
+	defer conn.Close(context.Background())
 
 	var store storage.Storage
 	s, err := storage.NewFileStorage(cfg.FileStoragePath)
@@ -40,6 +50,7 @@ func main() {
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
+	r.Get("/ping", pingHandler(conn))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
@@ -117,5 +128,19 @@ func apiShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 		} else {
 			w.Write(data)
 		}
+	}
+}
+
+func pingHandler(conn *pgx.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+
+		if err := conn.Ping(ctx); err != nil {
+			http.Error(w, "database connection failed", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
 	}
 }
