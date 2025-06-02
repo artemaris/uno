@@ -27,7 +27,7 @@ func main() {
 	var store storage.Storage
 	if cfg.DatabaseDSN != "" {
 		var err error
-		conn, err = db.NewPG(cfg.DatabaseDSN)
+		conn, err := db.NewPG(cfg.DatabaseDSN)
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
