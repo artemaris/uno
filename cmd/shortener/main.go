@@ -45,10 +45,11 @@ func main() {
 	defer logger.Sync()
 
 	r := chi.NewRouter()
-	r.Get("/ping", pingHandler(conn))
 
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.LoggingMiddleware(logger))
+
+	r.Get("/ping", pingHandler(conn))
 
 	var store storage.Storage
 	if conn != nil {
