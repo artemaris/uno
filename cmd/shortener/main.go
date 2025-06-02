@@ -46,11 +46,9 @@ func main() {
 	r.Get("/ping", pingHandler(conn))
 
 	var store storage.Storage
-	if conn != nil {
-		store, err = storage.NewPostgresStorage(conn)
-		if err != nil {
-			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
-		}
+	store, err = storage.NewPostgresStorage(conn)
+	if err != nil {
+		log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 	}
 
 	if store == nil && cfg.FileStoragePath != "" {
