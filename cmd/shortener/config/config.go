@@ -41,7 +41,7 @@ func NewConfig() *Config {
 	}
 
 	dsn := os.Getenv("DATABASE_DSN")
-	if dsn != "" {
+	if dsn == "" {
 		dsn = *dsnFlag
 	}
 
