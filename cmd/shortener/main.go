@@ -51,17 +51,16 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
-	}
-
-	if store == nil && cfg.FileStoragePath != "" {
-		s, err := storage.NewFileStorage(cfg.FileStoragePath)
-		if err == nil {
-			store = s
+	} else {
+		if cfg.FileStoragePath != "" {
+			s, err := storage.NewFileStorage(cfg.FileStoragePath)
+			if err == nil {
+				store = s
+			}
 		}
-	}
-
-	if store == nil {
-		store = storage.NewInMemoryStorage()
+		if store == nil {
+			store = storage.NewInMemoryStorage()
+		}
 	}
 
 	r.Post("/", shortenURLHandler(cfg, store))
