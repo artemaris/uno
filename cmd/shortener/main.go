@@ -50,10 +50,6 @@ func main() {
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.LoggingMiddleware(logger))
 
-	if cfg.DatabaseDSN != "" {
-		r.Get("/ping", pingHandler(conn))
-	}
-
 	var store storage.Storage
 	if conn != nil {
 		dbStorage, err := storage.NewPostgresStorage(conn)
@@ -76,6 +72,7 @@ func main() {
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
+	r.Get("/ping", pingHandler(conn))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
