@@ -65,6 +65,7 @@ func main() {
 
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
+	r.Post("/api/shorten/batch", batchShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
 
 	srv := &http.Server{
@@ -164,5 +165,48 @@ func pingHandler(conn *pgx.Conn) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func batchShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read body", http.StatusBadRequest)
+			return
+		}
+
+		var requests []models.BatchRequest
+		if err := models.UnmarshalBatchRequest(data, &requests); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if len(requests) == 0 {
+			http.Error(w, "empty batch", http.StatusBadRequest)
+			return
+		}
+
+		responses := make([]models.BatchResponse, 0, len(requests))
+
+		for _, req := range requests {
+			shortID := utils.GenerateShortID()
+			store.Save(shortID, req.OriginalURL)
+
+			responses = append(responses, models.BatchResponse{
+				CorrelationID: req.CorrelationID,
+				ShortURL:      cfg.BaseURL + "/" + shortID,
+			})
+		}
+
+		respData, err := models.MarshalBatchResponse(responses)
+		if err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write(respData)
 	}
 }

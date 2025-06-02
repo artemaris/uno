@@ -38,6 +38,25 @@ func (s *PostgresStorage) Save(shortID, originalURL string) {
 	)
 }
 
+func (s *PostgresStorage) SaveBatch(pairs map[string]string) error {
+	batch := &pgx.Batch{}
+	for shortID, originalURL := range pairs {
+		batch.Queue(`INSERT INTO public.short_urls (id, original_url) VALUES ($1, $2)
+                     ON CONFLICT (id) DO NOTHING`, shortID, originalURL)
+	}
+
+	br := s.conn.SendBatch(context.Background(), batch)
+	defer br.Close()
+
+	for range pairs {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *PostgresStorage) Get(shortID string) (string, bool) {
 	var originalURL string
 	err := s.conn.QueryRow(context.Background(),

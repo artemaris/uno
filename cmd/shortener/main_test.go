@@ -22,6 +22,7 @@ func setupRouter(cfg *config.Config, store storage.Storage) http.Handler {
 	r.Use(middleware.GzipMiddleware)
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
+	r.Post("/api/shorten/batch", batchShortenHandler(cfg, store)) //
 	r.Get("/{id}", redirectHandler(store))
 	return r
 }
@@ -155,5 +156,54 @@ func TestGzipResponse(t *testing.T) {
 
 	if !strings.HasPrefix(apiResp.Result, cfg.BaseURL+"/") {
 		t.Errorf("unexpected result: %s", apiResp.Result)
+	}
+}
+
+func TestBatchShortenHandler(t *testing.T) {
+	cfg := &config.Config{
+		Address: "localhost:8080",
+		BaseURL: "http://localhost:8080",
+	}
+	store := storage.NewInMemoryStorage()
+	handler := setupRouter(cfg, store)
+
+	batch := []models.BatchRequest{
+		{CorrelationID: "1", OriginalURL: "https://a.com"},
+		{CorrelationID: "2", OriginalURL: "https://b.com"},
+	}
+	data, _ := json.Marshal(batch)
+	req := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", strings.NewReader(string(data)))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", resp.Code)
+	}
+
+	var result []models.BatchResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if len(result) != len(batch) {
+		t.Errorf("expected %d responses, got %d", len(batch), len(result))
+	}
+
+	reqEmpty := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", strings.NewReader("[]"))
+	reqEmpty.Header.Set("Content-Type", "application/json")
+	respEmpty := httptest.NewRecorder()
+	handler.ServeHTTP(respEmpty, reqEmpty)
+
+	if respEmpty.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty batch, got %d", respEmpty.Code)
+	}
+
+	reqInvalid := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", strings.NewReader(`not-json`))
+	reqInvalid.Header.Set("Content-Type", "application/json")
+	respInvalid := httptest.NewRecorder()
+	handler.ServeHTTP(respInvalid, reqInvalid)
+
+	if respInvalid.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid JSON, got %d", respInvalid.Code)
 	}
 }
