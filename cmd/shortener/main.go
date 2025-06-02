@@ -7,18 +7,38 @@ import (
 	"net/http"
 	"strings"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/middleware"
+	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
 	"uno/cmd/shortener/utils"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg := config.NewConfig()
-	store := storage.NewInMemoryStorage()
+
+	var store storage.Storage
+	s, err := storage.NewFileStorage(cfg.FileStoragePath)
+	if err != nil {
+		log.Fatalf("failed to create file storage: %v", err)
+	}
+	store = s
+
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Could not initialize zap logger: %v", err)
+	}
+	defer logger.Sync()
 
 	r := chi.NewRouter()
+
+	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.LoggingMiddleware(logger))
+
 	r.Post("/", shortenURLHandler(cfg, store))
+	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
 
 	srv := &http.Server{
@@ -64,5 +84,38 @@ func redirectHandler(store storage.Storage) http.HandlerFunc {
 
 		w.Header().Set("Location", originalURL)
 		w.WriteHeader(http.StatusTemporaryRedirect)
+	}
+}
+
+func apiShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		var req models.APIRequest
+		if err := req.UnmarshalJSON(data); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		originalURL := strings.TrimSpace(req.URL)
+		if originalURL == "" {
+			http.Error(w, "empty URL", http.StatusBadRequest)
+			return
+		}
+
+		shortID := utils.GenerateShortID()
+		store.Save(shortID, originalURL)
+
+		resp := models.APIResponse{
+			Result: cfg.BaseURL + "/" + shortID,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if data, err := resp.MarshalJSON(); err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+			return
+		} else {
+			w.Write(data)
+		}
 	}
 }
