@@ -35,8 +35,7 @@ func main() {
 		if _, err := storage.NewPostgresStorage(conn); err != nil {
 			log.Fatalf("failed to initialize PostgreSQL schema: %v", err)
 		}
-
-		defer conn.Close(context.Background())
+		// initSchema запускается выше, чтобы таблицы гарантированно создавались в БД
 	}
 
 	logger, err := zap.NewProduction()
@@ -46,6 +45,7 @@ func main() {
 	defer logger.Sync()
 
 	r := chi.NewRouter()
+	r.Get("/ping", pingHandler(conn))
 
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.LoggingMiddleware(logger))
@@ -72,7 +72,6 @@ func main() {
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
-	r.Get("/ping", pingHandler(conn))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
@@ -83,6 +82,8 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
+
+	defer conn.Close(context.Background())
 }
 
 func shortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
