@@ -23,11 +23,15 @@ import (
 func main() {
 	cfg := config.NewConfig()
 
-	conn, err := db.NewPG(cfg.DatabaseDSN)
-	if err != nil {
-		log.Fatalf("DB connection failed: %v", err)
+	var conn *pgx.Conn
+	if cfg.DatabaseDSN != "" {
+		var err error
+		conn, err = db.NewPG(cfg.DatabaseDSN)
+		if err != nil {
+			log.Fatalf("DB connection failed: %v", err)
+		}
+		defer conn.Close(context.Background())
 	}
-	defer conn.Close(context.Background())
 
 	var store storage.Storage
 	s, err := storage.NewFileStorage(cfg.FileStoragePath)
@@ -50,7 +54,10 @@ func main() {
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
-	r.Get("/ping", pingHandler(conn))
+
+	if conn != nil {
+		r.Get("/ping", pingHandler(conn))
+	}
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
