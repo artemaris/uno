@@ -23,7 +23,10 @@ func NewConfig() *Config {
 	baseURLFlag := flag.String("b", defaultBaseURL, "http base url")
 	filePathFlag := flag.String("f", defaultStoragePath, "storage path")
 	dsnFlag := flag.String("d", "", "PostgreSQL DSN")
-	dsn := *dsnFlag
+	dsn := os.Getenv("DATABASE_DSN")
+	if dsn != "" {
+		dsn = *dsnFlag
+	}
 	flag.Parse()
 
 	addr := os.Getenv("SERVER_ADDRESS")
