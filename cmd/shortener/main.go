@@ -50,14 +50,11 @@ func main() {
 	r.Use(middleware.LoggingMiddleware(logger))
 
 	var store storage.Storage
-	if cfg.DatabaseDSN != "" {
-		c, err := db.NewPG(cfg.DatabaseDSN)
+	if conn != nil {
+		dbStorage, err := storage.NewPostgresStorage(conn)
 		if err == nil {
-			dbStorage, err := storage.NewPostgresStorage(c)
-			if err == nil {
-				store = dbStorage
-				r.Get("/ping", pingHandler(c))
-			}
+			store = dbStorage
+			r.Get("/ping", pingHandler(conn))
 		}
 	}
 
