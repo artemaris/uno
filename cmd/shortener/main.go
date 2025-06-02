@@ -24,28 +24,18 @@ func main() {
 	cfg := config.NewConfig()
 
 	var conn *pgx.Conn
-	var store storage.Storage
 	if cfg.DatabaseDSN != "" {
 		var err error
-		conn, err := db.NewPG(cfg.DatabaseDSN)
+		conn, err = db.NewPG(cfg.DatabaseDSN)
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
-		defer conn.Close(context.Background())
 
-		dbStorage, err := storage.NewPostgresStorage(conn)
-		if err != nil {
-			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
+		// создаём таблицу даже если она не будет использоваться
+		if _, err := storage.NewPostgresStorage(conn); err != nil {
+			log.Fatalf("failed to initialize PostgreSQL schema: %v", err)
 		}
-		store = dbStorage
-	} else if cfg.FileStoragePath != "" {
-		s, err := storage.NewFileStorage(cfg.FileStoragePath)
-		if err != nil {
-			log.Fatalf("failed to create file storage: %v", err)
-		}
-		store = s
-	} else {
-		store = storage.NewInMemoryStorage()
+		defer conn.Close(context.Background())
 	}
 
 	logger, err := zap.NewProduction()
@@ -59,10 +49,32 @@ func main() {
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.LoggingMiddleware(logger))
 
+	var store storage.Storage
+	if cfg.DatabaseDSN != "" {
+		c, err := db.NewPG(cfg.DatabaseDSN)
+		if err == nil {
+			dbStorage, err := storage.NewPostgresStorage(c)
+			if err == nil {
+				store = dbStorage
+				r.Get("/ping", pingHandler(c))
+			}
+		}
+	}
+
+	if store == nil && cfg.FileStoragePath != "" {
+		s, err := storage.NewFileStorage(cfg.FileStoragePath)
+		if err == nil {
+			store = s
+		}
+	}
+
+	if store == nil {
+		store = storage.NewInMemoryStorage()
+	}
+
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
-	r.Get("/ping", pingHandler(conn))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
