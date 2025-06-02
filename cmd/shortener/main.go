@@ -54,10 +54,7 @@ func main() {
 	r.Post("/", shortenURLHandler(cfg, store))
 	r.Post("/api/shorten", apiShortenHandler(cfg, store))
 	r.Get("/{id}", redirectHandler(store))
-
-	if conn != nil {
-		r.Get("/ping", pingHandler(conn))
-	}
+	r.Get("/ping", pingHandler(conn))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
@@ -140,6 +137,11 @@ func apiShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 
 func pingHandler(conn *pgx.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if conn == nil {
+			http.Error(w, "no database configured", http.StatusOK)
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
 
