@@ -24,6 +24,7 @@ func main() {
 	cfg := config.NewConfig()
 
 	var conn *pgx.Conn
+	var store storage.Storage
 	if cfg.DatabaseDSN != "" {
 		var err error
 		conn, err = db.NewPG(cfg.DatabaseDSN)
@@ -31,14 +32,21 @@ func main() {
 			log.Fatalf("DB connection failed: %v", err)
 		}
 		defer conn.Close(context.Background())
-	}
 
-	var store storage.Storage
-	s, err := storage.NewFileStorage(cfg.FileStoragePath)
-	if err != nil {
-		log.Fatalf("failed to create file storage: %v", err)
+		dbStorage, err := storage.NewPostgresStorage(conn)
+		if err != nil {
+			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
+		}
+		store = dbStorage
+	} else if cfg.FileStoragePath != "" {
+		s, err := storage.NewFileStorage(cfg.FileStoragePath)
+		if err != nil {
+			log.Fatalf("failed to create file storage: %v", err)
+		}
+		store = s
+	} else {
+		store = storage.NewInMemoryStorage()
 	}
-	store = s
 
 	logger, err := zap.NewProduction()
 	if err != nil {
