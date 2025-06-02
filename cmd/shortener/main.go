@@ -158,7 +158,7 @@ func apiShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 func pingHandler(conn *pgx.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if conn == nil {
-			http.Error(w, "no database configured", http.StatusOK)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 
