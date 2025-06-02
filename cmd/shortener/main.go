@@ -30,12 +30,6 @@ func main() {
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
-
-		// создаём таблицу даже если она не будет использоваться
-		if _, err := storage.NewPostgresStorage(conn); err != nil {
-			log.Fatalf("failed to initialize PostgreSQL schema: %v", err)
-		}
-		// initSchema запускается выше, чтобы таблицы гарантированно создавались в БД
 	}
 
 	logger, err := zap.NewProduction()
@@ -53,9 +47,9 @@ func main() {
 
 	var store storage.Storage
 	if conn != nil {
-		dbStorage, err := storage.NewPostgresStorage(conn)
-		if err == nil {
-			store = dbStorage
+		store, err = storage.NewPostgresStorage(conn)
+		if err != nil {
+			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
 	}
 
