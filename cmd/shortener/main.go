@@ -35,6 +35,7 @@ func main() {
 		if _, err := storage.NewPostgresStorage(conn); err != nil {
 			log.Fatalf("failed to initialize PostgreSQL schema: %v", err)
 		}
+
 		defer conn.Close(context.Background())
 	}
 
@@ -49,12 +50,15 @@ func main() {
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.LoggingMiddleware(logger))
 
+	if cfg.DatabaseDSN != "" {
+		r.Get("/ping", pingHandler(conn))
+	}
+
 	var store storage.Storage
 	if conn != nil {
 		dbStorage, err := storage.NewPostgresStorage(conn)
 		if err == nil {
 			store = dbStorage
-			r.Get("/ping", pingHandler(conn))
 		}
 	}
 
