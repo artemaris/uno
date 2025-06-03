@@ -94,6 +94,12 @@ func shortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 			return
 		}
 
+		if existingID, ok := store.FindByOriginal(originalURL); ok {
+			w.WriteHeader(http.StatusConflict)
+			fmt.Fprint(w, cfg.BaseURL+"/"+existingID)
+			return
+		}
+
 		shortID := utils.GenerateShortID()
 		store.Save(shortID, originalURL)
 
@@ -128,6 +134,15 @@ func apiShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 		originalURL := strings.TrimSpace(req.URL)
 		if originalURL == "" {
 			http.Error(w, "empty URL", http.StatusBadRequest)
+			return
+		}
+
+		if existingID, ok := store.FindByOriginal(originalURL); ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			resp := models.APIResponse{Result: cfg.BaseURL + "/" + existingID}
+			data, _ := resp.MarshalJSON()
+			w.Write(data)
 			return
 		}
 
@@ -187,16 +202,22 @@ func batchShortenHandler(cfg *config.Config, store storage.Storage) http.Handler
 			return
 		}
 
+		pairs := make(map[string]string, len(requests))
 		responses := make([]models.BatchResponse, 0, len(requests))
 
 		for _, req := range requests {
 			shortID := utils.GenerateShortID()
-			store.Save(shortID, req.OriginalURL)
+			pairs[shortID] = req.OriginalURL
 
 			responses = append(responses, models.BatchResponse{
 				CorrelationID: req.CorrelationID,
 				ShortURL:      cfg.BaseURL + "/" + shortID,
 			})
+		}
+
+		if err := store.SaveBatch(pairs); err != nil {
+			http.Error(w, "failed to save batch", http.StatusInternalServerError)
+			return
 		}
 
 		respData, err := models.MarshalBatchResponse(responses)

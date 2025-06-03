@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type PostgresStorage struct {
@@ -24,18 +26,37 @@ func (s *PostgresStorage) initSchema() error {
 	_, err := s.conn.Exec(context.Background(), `
         CREATE TABLE IF NOT EXISTS public.short_urls (
             id varchar PRIMARY KEY,
-            original_url varchar NOT NULL
+            original_url varchar UNIQUE NOT NULL
         )
     `)
 	return err
 }
 
 func (s *PostgresStorage) Save(shortID, originalURL string) {
-	_, _ = s.conn.Exec(context.Background(),
-		`INSERT INTO public.short_urls (id, original_url) VALUES ($1, $2)
-         ON CONFLICT (id) DO NOTHING`,
+	_, err := s.conn.Exec(context.Background(),
+		`INSERT INTO public.short_urls (id, original_url) VALUES ($1, $2)`,
 		shortID, originalURL,
 	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return
+		}
+	}
+}
+
+func (s *PostgresStorage) FindByOriginal(originalURL string) (string, bool) {
+	var id string
+	err := s.conn.QueryRow(context.Background(),
+		`SELECT id FROM public.short_urls WHERE original_url = $1`, originalURL,
+	).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false
+	}
+	if err != nil {
+		return "", false
+	}
+	return id, true
 }
 
 func (s *PostgresStorage) SaveBatch(pairs map[string]string) error {
