@@ -8,7 +8,7 @@ import (
 const (
 	defaultAddress     = "localhost:8080"
 	defaultBaseURL     = "http://localhost:8080"
-	defaultStoragePath = "data/storage.jsonl"
+	defaultStoragePath = "/tmp/short-url-db.json"
 )
 
 type Config struct {

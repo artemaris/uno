@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -16,6 +17,8 @@ type fileStorage struct {
 	mu       sync.RWMutex
 	data     map[string]string
 	file     *os.File
+	queue    chan record
+	done     chan struct{}
 }
 
 type record struct {
@@ -40,6 +43,10 @@ func NewFileStorage(path string) (Storage, error) {
 		data:     make(map[string]string),
 		file:     file,
 	}
+
+	fs.queue = make(chan record, 1000)
+	fs.done = make(chan struct{})
+	go fs.runWriter()
 
 	if err := fs.load(); err != nil {
 		return nil, err
@@ -75,11 +82,11 @@ func (fs *fileStorage) Save(shortID, originalURL string) {
 		ShortURL:    shortID,
 		OriginalURL: originalURL,
 	}
-	jsonData, err := json.Marshal(rec)
+	_, err := json.Marshal(rec)
 	if err != nil {
 		return
 	}
-	fs.file.Write(append(jsonData, '\n'))
+	fs.queue <- record{}
 }
 
 func (fs *fileStorage) Get(shortID string) (string, bool) {
@@ -112,11 +119,49 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
 			ShortURL:    shortID,
 			OriginalURL: originalURL,
 		}
-		jsonData, err := json.Marshal(rec)
+		_, err := json.Marshal(rec)
 		if err != nil {
 			continue
 		}
-		fs.file.Write(append(jsonData, '\n'))
+		fs.queue <- record{}
 	}
 	return nil
+}
+
+func (fs *fileStorage) runWriter() {
+	buffer := make([]record, 0, 100)
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case rec := <-fs.queue:
+			buffer = append(buffer, rec)
+			if len(buffer) >= 100 {
+				fs.flush(buffer)
+				buffer = buffer[:0]
+			}
+		case <-ticker.C:
+			if len(buffer) > 0 {
+				fs.flush(buffer)
+				buffer = buffer[:0]
+			}
+		case <-fs.done:
+			fs.flush(buffer)
+			return
+		}
+	}
+}
+
+func (fs *fileStorage) flush(records []record) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	for _, rec := range records {
+		data, err := json.Marshal(rec)
+		if err != nil {
+			continue
+		}
+		fs.file.Write(append(data, '\n'))
+	}
 }
