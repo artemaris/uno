@@ -19,6 +19,7 @@ type fileStorage struct {
 	file     *os.File
 	queue    chan record
 	done     chan struct{}
+	flushNow chan chan struct{}
 }
 
 type record struct {
@@ -46,6 +47,7 @@ func NewFileStorage(path string) (Storage, error) {
 
 	fs.queue = make(chan record, 1000)
 	fs.done = make(chan struct{})
+	fs.flushNow = make(chan chan struct{})
 	go fs.runWriter()
 
 	if err := fs.load(); err != nil {
@@ -86,7 +88,7 @@ func (fs *fileStorage) Save(shortID, originalURL string) {
 	if err != nil {
 		return
 	}
-	fs.queue <- record{}
+	fs.queue <- rec
 }
 
 func (fs *fileStorage) Get(shortID string) (string, bool) {
@@ -123,7 +125,7 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
 		if err != nil {
 			continue
 		}
-		fs.queue <- record{}
+		fs.queue <- rec
 	}
 	return nil
 }
@@ -150,8 +152,22 @@ func (fs *fileStorage) runWriter() {
 		case <-fs.done:
 			fs.flush(buffer)
 			return
+
+		case ch := <-fs.flushNow:
+			if len(buffer) > 0 {
+				fs.flush(buffer)
+				buffer = buffer[:0]
+			}
+			close(ch)
 		}
+
 	}
+}
+
+func (fs *fileStorage) Flush() {
+	done := make(chan struct{})
+	fs.flushNow <- done
+	<-done
 }
 
 func (fs *fileStorage) flush(records []record) {
