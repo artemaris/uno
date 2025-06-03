@@ -88,3 +88,35 @@ func (fs *fileStorage) Get(shortID string) (string, bool) {
 	url, ok := fs.data[shortID]
 	return url, ok
 }
+
+func (fs *fileStorage) FindByOriginal(originalURL string) (string, bool) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	for shortID, url := range fs.data {
+		if url == originalURL {
+			return shortID, true
+		}
+	}
+	return "", false
+}
+
+func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	for shortID, originalURL := range pairs {
+		fs.data[shortID] = originalURL
+
+		rec := record{
+			UUID:        uuid.NewString(),
+			ShortURL:    shortID,
+			OriginalURL: originalURL,
+		}
+		jsonData, err := json.Marshal(rec)
+		if err != nil {
+			continue
+		}
+		fs.file.Write(append(jsonData, '\n'))
+	}
+	return nil
+}
