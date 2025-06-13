@@ -38,7 +38,7 @@ func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 	}
 }
 
-func ApiShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
+func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, _ := io.ReadAll(r.Body)
 		var req models.APIRequest

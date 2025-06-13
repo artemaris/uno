@@ -24,7 +24,7 @@ func setupRouter(cfg *config.Config, store storage.Storage, conn *pgx.Conn) http
 	r := chi.NewRouter()
 	r.Use(middleware.GzipMiddleware)
 	r.Post("/", handlers.ShortenURLHandler(cfg, store))
-	r.Post("/api/shorten", handlers.ApiShortenHandler(cfg, store))
+	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
 	r.Post("/api/shorten/batch", handlers.BatchShortenHandler(cfg, store))
 	r.Get("/{id}", handlers.RedirectHandler(store))
 	r.Get("/ping", handlers.PingHandler(conn))
