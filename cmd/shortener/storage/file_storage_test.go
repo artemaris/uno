@@ -7,7 +7,7 @@ import (
 )
 
 func TestFileStorage_SaveAndGet(t *testing.T) {
-	testFile := "test_storage.jsonl"
+	testFile := "temp/file_storage_test.json"
 	defer os.Remove(testFile)
 
 	store, err := NewFileStorage(testFile)
