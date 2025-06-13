@@ -12,10 +12,11 @@ import (
 )
 
 type fileStorage struct {
-	filePath string
-	mu       sync.RWMutex
-	data     map[string]string
-	file     *os.File
+	filePath        string
+	mu              sync.RWMutex
+	originalToShort map[string]string
+	shortToOriginal map[string]string
+	file            *os.File
 }
 
 type record struct {
@@ -36,9 +37,10 @@ func NewFileStorage(path string) (Storage, error) {
 	}
 
 	fs := &fileStorage{
-		filePath: path,
-		data:     make(map[string]string),
-		file:     file,
+		filePath:        path,
+		originalToShort: make(map[string]string),
+		shortToOriginal: make(map[string]string),
+		file:            file,
 	}
 
 	if err := fs.load(); err != nil {
@@ -59,7 +61,8 @@ func (fs *fileStorage) load() error {
 		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
 			continue
 		}
-		fs.data[r.ShortURL] = r.OriginalURL
+		fs.originalToShort[r.OriginalURL] = r.ShortURL
+		fs.shortToOriginal[r.ShortURL] = r.OriginalURL
 	}
 	return scanner.Err()
 }
@@ -68,7 +71,13 @@ func (fs *fileStorage) Save(shortID, originalURL string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	fs.data[shortID] = originalURL
+	// не сохраняем повторно
+	if _, exists := fs.originalToShort[originalURL]; exists {
+		return
+	}
+
+	fs.originalToShort[originalURL] = shortID
+	fs.shortToOriginal[shortID] = originalURL
 
 	rec := record{
 		UUID:        uuid.NewString(),
@@ -85,19 +94,15 @@ func (fs *fileStorage) Save(shortID, originalURL string) {
 func (fs *fileStorage) Get(shortID string) (string, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
-	url, ok := fs.data[shortID]
+	url, ok := fs.shortToOriginal[shortID]
 	return url, ok
 }
 
 func (fs *fileStorage) FindByOriginal(originalURL string) (string, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
-	for shortID, url := range fs.data {
-		if url == originalURL {
-			return shortID, true
-		}
-	}
-	return "", false
+	id, ok := fs.originalToShort[originalURL]
+	return id, ok
 }
 
 func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
@@ -105,7 +110,12 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
 	defer fs.mu.Unlock()
 
 	for shortID, originalURL := range pairs {
-		fs.data[shortID] = originalURL
+		if _, exists := fs.originalToShort[originalURL]; exists {
+			continue
+		}
+
+		fs.originalToShort[originalURL] = shortID
+		fs.shortToOriginal[shortID] = originalURL
 
 		rec := record{
 			UUID:        uuid.NewString(),
