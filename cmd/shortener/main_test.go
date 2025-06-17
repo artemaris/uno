@@ -2,12 +2,15 @@ package main
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v5"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
@@ -17,12 +20,14 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func setupRouter(cfg *config.Config, store storage.Storage) http.Handler {
+func setupRouter(cfg *config.Config, store storage.Storage, conn *pgx.Conn) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.GzipMiddleware)
-	r.Post("/", shortenURLHandler(cfg, store))
-	r.Post("/api/shorten", apiShortenHandler(cfg, store))
-	r.Get("/{id}", redirectHandler(store))
+	r.Post("/", handlers.ShortenURLHandler(cfg, store))
+	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
+	r.Post("/api/shorten/batch", handlers.BatchShortenHandler(cfg, store))
+	r.Get("/{id}", handlers.RedirectHandler(store))
+	r.Get("/ping", handlers.PingHandler(conn))
 	return r
 }
 
@@ -32,7 +37,7 @@ func TestShortenAndRedirect(t *testing.T) {
 		BaseURL: "http://localhost:8080",
 	}
 	store := storage.NewInMemoryStorage()
-	handler := setupRouter(cfg, store)
+	handler := setupRouter(cfg, store, nil)
 
 	reqBody := "https://practicum.yandex.ru/"
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
@@ -90,7 +95,7 @@ func TestAPIShortenHandler(t *testing.T) {
 		BaseURL: "http://localhost:8080",
 	}
 	store := storage.NewInMemoryStorage()
-	handler := setupRouter(cfg, store)
+	handler := setupRouter(cfg, store, nil)
 
 	body := `{"url":"https://example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(body))
@@ -118,7 +123,7 @@ func TestGzipResponse(t *testing.T) {
 		BaseURL: "http://localhost:8080",
 	}
 	store := storage.NewInMemoryStorage()
-	handler := setupRouter(cfg, store)
+	handler := setupRouter(cfg, store, nil)
 
 	jsonBody := `{"url":"https://gzip-test.example"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(jsonBody))
@@ -155,5 +160,101 @@ func TestGzipResponse(t *testing.T) {
 
 	if !strings.HasPrefix(apiResp.Result, cfg.BaseURL+"/") {
 		t.Errorf("unexpected result: %s", apiResp.Result)
+	}
+}
+
+func TestPingHandler(t *testing.T) {
+	t.Run("without database", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		resp := httptest.NewRecorder()
+
+		handler := handlers.PingHandler(nil)
+		handler.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.Code)
+		}
+	})
+
+	t.Run("with bad DB connection", func(t *testing.T) {
+		conn, err := pgx.Connect(context.Background(), "postgres://invalid")
+		if err == nil {
+			defer conn.Close(context.Background())
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		resp := httptest.NewRecorder()
+
+		handler := handlers.PingHandler(conn)
+		handler.ServeHTTP(resp, req)
+
+		if conn == nil {
+			if resp.Code != http.StatusOK {
+				t.Errorf("expected 200 without DB connection, got %d", resp.Code)
+			}
+		} else {
+			if resp.Code != http.StatusInternalServerError {
+				t.Errorf("expected 500 for failed ping, got %d", resp.Code)
+			}
+		}
+	})
+}
+
+func TestBatchShortenHandler(t *testing.T) {
+	cfg := &config.Config{
+		Address: "localhost:8080",
+		BaseURL: "http://localhost:8080",
+	}
+	store := storage.NewInMemoryStorage()
+	handler := setupRouter(cfg, store, nil)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		checkFunc  func(t *testing.T, body []byte)
+	}{
+		{
+			name:       "valid batch",
+			body:       `[{"correlation_id":"1","original_url":"https://a.com"},{"correlation_id":"2","original_url":"https://b.com"}]`,
+			wantStatus: http.StatusCreated,
+			checkFunc: func(t *testing.T, body []byte) {
+				var result []models.BatchResponse
+				if err := json.Unmarshal(body, &result); err != nil {
+					t.Fatalf("failed to unmarshal response: %v", err)
+				}
+				if len(result) != 2 {
+					t.Errorf("expected 2 responses, got %d", len(result))
+				}
+			},
+		},
+		{
+			name:       "empty batch",
+			body:       `[]`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid JSON",
+			body:       `not-json`,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			resp := httptest.NewRecorder()
+
+			handler.ServeHTTP(resp, req)
+
+			if resp.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, resp.Code)
+			}
+
+			if tt.checkFunc != nil {
+				tt.checkFunc(t, resp.Body.Bytes())
+			}
+		})
 	}
 }
