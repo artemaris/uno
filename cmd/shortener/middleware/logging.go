@@ -8,8 +8,9 @@ import (
 )
 
 type responseData struct {
-	status int
-	size   int
+	status      int
+	size        int
+	contentType string
 }
 
 type loggingResponseWriter struct {
@@ -25,6 +26,7 @@ func (l *loggingResponseWriter) WriteHeader(statusCode int) {
 func (l *loggingResponseWriter) Write(b []byte) (int, error) {
 	size, err := l.ResponseWriter.Write(b)
 	l.data.size += size
+	l.data.contentType = l.Header().Get("Content-Type")
 	return size, err
 }
 
@@ -50,6 +52,7 @@ func LoggingMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				zap.String("uri", r.RequestURI),
 				zap.Int("status", data.status),
 				zap.Int("size", data.size),
+				zap.String("content_type", data.contentType),
 				zap.Duration("duration", duration),
 			)
 		})
