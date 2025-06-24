@@ -17,8 +17,9 @@ func TestFileStorage_SaveAndGet(t *testing.T) {
 
 	shortID := "abc123"
 	originalURL := "https://example.com"
+	userID := "test-user"
 
-	store.Save(shortID, originalURL)
+	store.Save(shortID, originalURL, userID)
 
 	got, ok := store.Get(shortID)
 	if !ok {
@@ -26,6 +27,14 @@ func TestFileStorage_SaveAndGet(t *testing.T) {
 	}
 	if got != originalURL {
 		t.Fatalf("expected %s, got %s", originalURL, got)
+	}
+
+	urls := store.GetUserURLs(userID)
+	if len(urls) != 1 {
+		t.Fatalf("expected 1 URL for user, got %d", len(urls))
+	}
+	if urls[0].ShortURL != shortID || urls[0].OriginalURL != originalURL {
+		t.Errorf("unexpected user URL: %+v", urls[0])
 	}
 
 	data, err := os.ReadFile(testFile)
