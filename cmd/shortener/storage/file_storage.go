@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"uno/cmd/shortener/models"
 
 	"github.com/google/uuid"
 )
@@ -17,12 +18,14 @@ type fileStorage struct {
 	originalToShort map[string]string
 	shortToOriginal map[string]string
 	file            *os.File
+	userURLs        map[string][]models.UserURL
 }
 
 type record struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+	UserID      string `json:"user_id"`
 }
 
 func NewFileStorage(path string) (Storage, error) {
@@ -41,6 +44,7 @@ func NewFileStorage(path string) (Storage, error) {
 		originalToShort: make(map[string]string),
 		shortToOriginal: make(map[string]string),
 		file:            file,
+		userURLs:        make(map[string][]models.UserURL),
 	}
 
 	if err := fs.load(); err != nil {
@@ -54,7 +58,15 @@ func (fs *fileStorage) load() error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	fs.file.Seek(0, 0)
+	if fs.userURLs == nil {
+		fs.userURLs = make(map[string][]models.UserURL)
+	}
+
+	_, err := fs.file.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+
 	scanner := bufio.NewScanner(fs.file)
 	for scanner.Scan() {
 		var r record
@@ -63,15 +75,18 @@ func (fs *fileStorage) load() error {
 		}
 		fs.originalToShort[r.OriginalURL] = r.ShortURL
 		fs.shortToOriginal[r.ShortURL] = r.OriginalURL
+		fs.userURLs[r.UserID] = append(fs.userURLs[r.UserID], models.UserURL{
+			ShortURL:    r.ShortURL,
+			OriginalURL: r.OriginalURL,
+		})
 	}
 	return scanner.Err()
 }
 
-func (fs *fileStorage) Save(shortID, originalURL string) {
+func (fs *fileStorage) Save(shortID, originalURL, userID string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	// не сохраняем повторно
 	if _, exists := fs.originalToShort[originalURL]; exists {
 		return
 	}
@@ -83,12 +98,17 @@ func (fs *fileStorage) Save(shortID, originalURL string) {
 		UUID:        uuid.NewString(),
 		ShortURL:    shortID,
 		OriginalURL: originalURL,
+		UserID:      userID,
 	}
+	fs.userURLs[userID] = append(fs.userURLs[userID], models.UserURL{
+		ShortURL:    shortID,
+		OriginalURL: originalURL,
+	})
 	jsonData, err := json.Marshal(rec)
 	if err != nil {
 		return
 	}
-	fs.file.Write(append(jsonData, '\n'))
+	_, _ = fs.file.Write(append(jsonData, '\n'))
 }
 
 func (fs *fileStorage) Get(shortID string) (string, bool) {
@@ -105,7 +125,7 @@ func (fs *fileStorage) FindByOriginal(originalURL string) (string, bool) {
 	return id, ok
 }
 
-func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
+func (fs *fileStorage) SaveBatch(pairs map[string]string, userID string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -121,12 +141,27 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
 			UUID:        uuid.NewString(),
 			ShortURL:    shortID,
 			OriginalURL: originalURL,
+			UserID:      userID,
 		}
+		fs.userURLs[userID] = append(fs.userURLs[userID], models.UserURL{
+			ShortURL:    shortID,
+			OriginalURL: originalURL,
+		})
 		jsonData, err := json.Marshal(rec)
 		if err != nil {
 			continue
 		}
-		fs.file.Write(append(jsonData, '\n'))
+		_, _ = fs.file.Write(append(jsonData, '\n'))
 	}
 	return nil
+}
+
+func (fs *fileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	urls, ok := fs.userURLs[userID]
+	if !ok {
+		return nil, nil
+	}
+	return urls, nil
 }

@@ -42,3 +42,9 @@ func UnmarshalBatchRequest(data []byte, v *[]BatchRequest) error {
 func MarshalBatchResponse(v []BatchResponse) ([]byte, error) {
 	return BatchResponseList(v).MarshalJSON()
 }
+
+//easyjson:json
+type UserURL struct {
+	ShortURL    string `json:"short_url"`
+	OriginalURL string `json:"original_url"`
+}

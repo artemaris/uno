@@ -1,29 +1,40 @@
 package storage
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+	"uno/cmd/shortener/models"
+)
 
 type Storage interface {
-	Save(shortID, originalURL string)
+	Save(shortID, originalURL, userID string)
 	Get(shortID string) (string, bool)
 	FindByOriginal(originalURL string) (string, bool)
-	SaveBatch(pairs map[string]string) error
+	SaveBatch(pairs map[string]string, userID string) error
+	GetUserURLs(userID string) ([]models.UserURL, error)
 }
 
 type InMemoryStorage struct {
-	data map[string]string
-	mu   sync.RWMutex
+	data  map[string]string
+	users map[string][]models.UserURL
+	mu    sync.RWMutex
 }
 
 func NewInMemoryStorage() *InMemoryStorage {
 	return &InMemoryStorage{
-		data: make(map[string]string),
+		data:  make(map[string]string),
+		users: make(map[string][]models.UserURL),
 	}
 }
 
-func (s *InMemoryStorage) Save(shortID, originalURL string) {
+func (s *InMemoryStorage) Save(shortID, originalURL, userID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data[shortID] = originalURL
+	s.users[userID] = append(s.users[userID], models.UserURL{
+		ShortURL:    shortID,
+		OriginalURL: originalURL,
+	})
 }
 
 func (s *InMemoryStorage) Get(shortID string) (string, bool) {
@@ -44,11 +55,25 @@ func (s *InMemoryStorage) FindByOriginal(originalURL string) (string, bool) {
 	return "", false
 }
 
-func (s *InMemoryStorage) SaveBatch(pairs map[string]string) error {
+func (s *InMemoryStorage) SaveBatch(pairs map[string]string, userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for shortID, originalURL := range pairs {
 		s.data[shortID] = originalURL
+		s.users[userID] = append(s.users[userID], models.UserURL{
+			ShortURL:    shortID,
+			OriginalURL: originalURL,
+		})
 	}
 	return nil
+}
+
+func (s *InMemoryStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	urls, ok := s.users[userID]
+	if !ok {
+		return nil, fmt.Errorf("user not found")
+	}
+	return urls, nil
 }
