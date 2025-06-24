@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
 	"uno/cmd/shortener/utils"
@@ -13,7 +14,11 @@ import (
 
 func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value("userID").(string)
+		userID, ok := middleware.FromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -42,7 +47,11 @@ func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 
 func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value("userID").(string)
+		userID, ok := middleware.FromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 
 		data, _ := io.ReadAll(r.Body)
 		var req models.APIRequest
@@ -90,7 +99,11 @@ func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 
 func BatchShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value("userID").(string)
+		userID, ok := middleware.FromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
