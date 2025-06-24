@@ -20,6 +20,9 @@ func UserURLsHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc
 		}
 
 		urls, err := store.GetUserURLs(userID)
+		for i := range urls {
+			urls[i].ShortURL = cfg.BaseURL + "/" + urls[i].ShortURL
+		}
 		if err != nil {
 			http.Error(w, "failed to get user URLs", http.StatusInternalServerError)
 			return
