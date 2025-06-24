@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uno/cmd/shortener/models"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -26,16 +27,17 @@ func (s *PostgresStorage) initSchema() error {
 	_, err := s.conn.Exec(context.Background(), `
         CREATE TABLE IF NOT EXISTS public.short_urls (
             id varchar PRIMARY KEY,
-            original_url varchar UNIQUE NOT NULL
+            original_url varchar UNIQUE NOT NULL,
+            user_id varchar NOT NULL
         )
     `)
 	return err
 }
 
-func (s *PostgresStorage) Save(shortID, originalURL string) {
+func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
 	_, err := s.conn.Exec(context.Background(),
-		`INSERT INTO public.short_urls (id, original_url) VALUES ($1, $2)`,
-		shortID, originalURL,
+		`INSERT INTO public.short_urls (id, original_url, user_id) VALUES ($1, $2, $3)`,
+		shortID, originalURL, userID,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -59,11 +61,11 @@ func (s *PostgresStorage) FindByOriginal(originalURL string) (string, bool) {
 	return id, true
 }
 
-func (s *PostgresStorage) SaveBatch(pairs map[string]string) error {
+func (s *PostgresStorage) SaveBatch(pairs map[string]string, userID string) error {
 	batch := &pgx.Batch{}
 	for shortID, originalURL := range pairs {
-		batch.Queue(`INSERT INTO public.short_urls (id, original_url) VALUES ($1, $2)
-                     ON CONFLICT (id) DO NOTHING`, shortID, originalURL)
+		batch.Queue(`INSERT INTO public.short_urls (id, original_url, user_id) VALUES ($1, $2, $3)
+                     ON CONFLICT (id) DO NOTHING`, shortID, originalURL, userID)
 	}
 
 	br := s.conn.SendBatch(context.Background(), batch)
@@ -90,4 +92,26 @@ func (s *PostgresStorage) Get(shortID string) (string, bool) {
 		return "", false
 	}
 	return originalURL, true
+}
+
+func (s *PostgresStorage) GetUserURLs(userID string) []models.UserURL {
+	rows, err := s.conn.Query(context.Background(),
+		`SELECT id, original_url FROM public.short_urls WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var result []models.UserURL
+	for rows.Next() {
+		var id, original string
+		if err := rows.Scan(&id, &original); err != nil {
+			continue
+		}
+		result = append(result, models.UserURL{
+			ShortURL:    id,
+			OriginalURL: original,
+		})
+	}
+	return result
 }
