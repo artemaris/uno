@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"uno/cmd/shortener/models"
 
 	"github.com/google/uuid"
 )
@@ -17,12 +18,14 @@ type fileStorage struct {
 	originalToShort map[string]string
 	shortToOriginal map[string]string
 	file            *os.File
+	userURLs        map[string][]models.UserURL
 }
 
 type record struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+	UserID      string `json:"user_id"`
 }
 
 func NewFileStorage(path string) (Storage, error) {
@@ -63,11 +66,18 @@ func (fs *fileStorage) load() error {
 		}
 		fs.originalToShort[r.OriginalURL] = r.ShortURL
 		fs.shortToOriginal[r.ShortURL] = r.OriginalURL
+		if fs.userURLs == nil {
+			fs.userURLs = make(map[string][]models.UserURL)
+		}
+		fs.userURLs[r.UserID] = append(fs.userURLs[r.UserID], models.UserURL{
+			ShortURL:    r.ShortURL,
+			OriginalURL: r.OriginalURL,
+		})
 	}
 	return scanner.Err()
 }
 
-func (fs *fileStorage) Save(shortID, originalURL string) {
+func (fs *fileStorage) Save(shortID, originalURL, userID string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -83,7 +93,12 @@ func (fs *fileStorage) Save(shortID, originalURL string) {
 		UUID:        uuid.NewString(),
 		ShortURL:    shortID,
 		OriginalURL: originalURL,
+		UserID:      userID,
 	}
+	fs.userURLs[userID] = append(fs.userURLs[userID], models.UserURL{
+		ShortURL:    shortID,
+		OriginalURL: originalURL,
+	})
 	jsonData, err := json.Marshal(rec)
 	if err != nil {
 		return
@@ -105,7 +120,7 @@ func (fs *fileStorage) FindByOriginal(originalURL string) (string, bool) {
 	return id, ok
 }
 
-func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
+func (fs *fileStorage) SaveBatch(pairs map[string]string, userID string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -121,7 +136,12 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
 			UUID:        uuid.NewString(),
 			ShortURL:    shortID,
 			OriginalURL: originalURL,
+			UserID:      userID,
 		}
+		fs.userURLs[userID] = append(fs.userURLs[userID], models.UserURL{
+			ShortURL:    shortID,
+			OriginalURL: originalURL,
+		})
 		jsonData, err := json.Marshal(rec)
 		if err != nil {
 			continue
@@ -129,4 +149,10 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
 		fs.file.Write(append(jsonData, '\n'))
 	}
 	return nil
+}
+
+func (fs *fileStorage) GetUserURLs(userID string) []models.UserURL {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	return fs.userURLs[userID]
 }

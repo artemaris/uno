@@ -57,11 +57,13 @@ func main() {
 		}
 	}
 
-	r.Post("/", handlers.ShortenURLHandler(cfg, store))
-	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
-	r.Post("/api/shorten/batch", handlers.BatchShortenHandler(cfg, store))
+	r.Use(middleware.WithUserIDMiddleware)
+	r.Post("/", middleware.WithUserID(handlers.ShortenURLHandler(cfg, store)))
+	r.Post("/api/shorten", middleware.WithUserID(handlers.APIShortenHandler(cfg, store)))
+	r.Post("/api/shorten/batch", middleware.WithUserID(handlers.BatchShortenHandler(cfg, store)))
 	r.Get("/{id}", handlers.RedirectHandler(store))
 	r.Get("/ping", handlers.PingHandler(conn))
+	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
