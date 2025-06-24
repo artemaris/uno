@@ -19,7 +19,11 @@ func UserURLsHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc
 			return
 		}
 
-		urls := store.GetUserURLs(userID)
+		urls, err := store.GetUserURLs(userID)
+		if err != nil {
+			http.Error(w, "failed to get user URLs", http.StatusInternalServerError)
+			return
+		}
 		if len(urls) == 0 {
 			w.WriteHeader(http.StatusNoContent)
 			return

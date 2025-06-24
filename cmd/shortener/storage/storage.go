@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"sync"
 	"uno/cmd/shortener/models"
 )
@@ -10,7 +11,7 @@ type Storage interface {
 	Get(shortID string) (string, bool)
 	FindByOriginal(originalURL string) (string, bool)
 	SaveBatch(pairs map[string]string, userID string) error
-	GetUserURLs(userID string) []models.UserURL
+	GetUserURLs(userID string) ([]models.UserURL, error)
 }
 
 type InMemoryStorage struct {
@@ -67,8 +68,12 @@ func (s *InMemoryStorage) SaveBatch(pairs map[string]string, userID string) erro
 	return nil
 }
 
-func (s *InMemoryStorage) GetUserURLs(userID string) []models.UserURL {
+func (s *InMemoryStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.users[userID]
+	urls, ok := s.users[userID]
+	if !ok {
+		return nil, fmt.Errorf("user not found")
+	}
+	return urls, nil
 }
