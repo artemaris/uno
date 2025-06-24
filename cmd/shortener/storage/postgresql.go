@@ -94,11 +94,11 @@ func (s *PostgresStorage) Get(shortID string) (string, bool) {
 	return originalURL, true
 }
 
-func (s *PostgresStorage) GetUserURLs(userID string) []models.UserURL {
+func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	rows, err := s.conn.Query(context.Background(),
 		`SELECT id, original_url FROM public.short_urls WHERE user_id = $1`, userID)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -113,5 +113,5 @@ func (s *PostgresStorage) GetUserURLs(userID string) []models.UserURL {
 			OriginalURL: original,
 		})
 	}
-	return result
+	return result, nil
 }

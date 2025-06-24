@@ -29,7 +29,10 @@ func TestFileStorage_SaveAndGet(t *testing.T) {
 		t.Fatalf("expected %s, got %s", originalURL, got)
 	}
 
-	urls := store.GetUserURLs(userID)
+	urls, err := store.GetUserURLs(userID)
+	if err != nil {
+		t.Fatalf("failed to get user URLs: %v", err)
+	}
 	if len(urls) != 1 {
 		t.Fatalf("expected 1 URL for user, got %d", len(urls))
 	}
