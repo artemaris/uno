@@ -44,6 +44,7 @@ func NewFileStorage(path string) (Storage, error) {
 		originalToShort: make(map[string]string),
 		shortToOriginal: make(map[string]string),
 		file:            file,
+		userURLs:        make(map[string][]models.UserURL),
 	}
 
 	if err := fs.load(); err != nil {
@@ -81,7 +82,6 @@ func (fs *fileStorage) Save(shortID, originalURL, userID string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	// не сохраняем повторно
 	if _, exists := fs.originalToShort[originalURL]; exists {
 		return
 	}
