@@ -58,7 +58,15 @@ func (fs *fileStorage) load() error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	fs.file.Seek(0, 0)
+	if fs.userURLs == nil {
+		fs.userURLs = make(map[string][]models.UserURL)
+	}
+
+	_, err := fs.file.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+
 	scanner := bufio.NewScanner(fs.file)
 	for scanner.Scan() {
 		var r record
@@ -67,9 +75,6 @@ func (fs *fileStorage) load() error {
 		}
 		fs.originalToShort[r.OriginalURL] = r.ShortURL
 		fs.shortToOriginal[r.ShortURL] = r.OriginalURL
-		if fs.userURLs == nil {
-			fs.userURLs = make(map[string][]models.UserURL)
-		}
 		fs.userURLs[r.UserID] = append(fs.userURLs[r.UserID], models.UserURL{
 			ShortURL:    r.ShortURL,
 			OriginalURL: r.OriginalURL,
@@ -103,7 +108,7 @@ func (fs *fileStorage) Save(shortID, originalURL, userID string) {
 	if err != nil {
 		return
 	}
-	fs.file.Write(append(jsonData, '\n'))
+	_, _ = fs.file.Write(append(jsonData, '\n'))
 }
 
 func (fs *fileStorage) Get(shortID string) (string, bool) {
@@ -146,13 +151,17 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string, userID string) error {
 		if err != nil {
 			continue
 		}
-		fs.file.Write(append(jsonData, '\n'))
+		_, _ = fs.file.Write(append(jsonData, '\n'))
 	}
 	return nil
 }
 
-func (fs *fileStorage) GetUserURLs(userID string) []models.UserURL {
+func (fs *fileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
-	return fs.userURLs[userID]
+	urls, ok := fs.userURLs[userID]
+	if !ok {
+		return nil, nil
+	}
+	return urls, nil
 }
