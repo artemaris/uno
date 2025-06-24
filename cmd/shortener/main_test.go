@@ -22,6 +22,7 @@ import (
 
 func setupRouter(cfg *config.Config, store storage.Storage, conn *pgx.Conn) http.Handler {
 	r := chi.NewRouter()
+	r.Use(middleware.WithUserIDMiddleware("supersecret"))
 	r.Use(middleware.GzipMiddleware)
 	r.Post("/", handlers.ShortenURLHandler(cfg, store))
 	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))

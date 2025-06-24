@@ -57,7 +57,7 @@ func main() {
 		}
 	}
 
-	r.Use(middleware.WithUserIDMiddleware)
+	r.Use(middleware.WithUserIDMiddleware("supersecret"))
 	r.Post("/", handlers.ShortenURLHandler(cfg, store))
 	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
 	r.Post("/api/shorten/batch", handlers.BatchShortenHandler(cfg, store))
