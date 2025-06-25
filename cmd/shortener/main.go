@@ -46,7 +46,7 @@ func main() {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
 		if ps, ok := store.(*storage.PostgresStorage); ok {
-			go ps.StartDeleteWorker(context.Background())
+			go ps.RunDeletionWorker(context.Background())
 		}
 	} else {
 		if cfg.FileStoragePath != "" {

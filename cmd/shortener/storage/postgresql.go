@@ -32,19 +32,6 @@ func NewPostgresStorage(conn *pgx.Conn) (Storage, error) {
 	return s, nil
 }
 
-func (s *PostgresStorage) StartDeleteWorker(ctx context.Context) {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case task := <-s.deleteQueue:
-				_ = s.DeleteURLs(task.UserID, task.ShortURLs)
-			}
-		}
-	}()
-}
-
 func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
 	_, err := s.conn.Exec(context.Background(),
 		`INSERT INTO public.short_urls (id, original_url, user_id) VALUES ($1, $2, $3)`,
@@ -143,6 +130,23 @@ func (s *PostgresStorage) AsyncDelete(userID string, shortIDs []string) {
 	s.deleteQueue <- deleteTask{
 		UserID:    userID,
 		ShortURLs: shortIDs,
+	}
+}
+
+func (s *PostgresStorage) RunDeletionWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case task := <-s.deleteQueue:
+			if len(task.ShortURLs) == 0 {
+				continue
+			}
+			err := s.DeleteURLs(task.UserID, task.ShortURLs)
+			if err != nil {
+				fmt.Printf("failed to delete URLs for user %s: %v\n", task.UserID, err)
+			}
+		}
 	}
 }
 
