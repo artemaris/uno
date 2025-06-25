@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"uno/cmd/shortener/models"
@@ -14,7 +13,6 @@ type Storage interface {
 	SaveBatch(pairs map[string]string, userID string) error
 	GetUserURLs(userID string) ([]models.UserURL, error)
 	DeleteURLs(userID string, ids []string) error
-	RunDeletionWorker(ctx context.Context)
 }
 
 type InMemoryStorage struct {
@@ -98,8 +96,4 @@ func (s *InMemoryStorage) DeleteURLs(userID string, ids []string) error {
 		s.deleted[id] = true
 	}
 	return nil
-}
-
-func (s *InMemoryStorage) RunDeletionWorker(ctx context.Context) {
-	// Метод добавлен для удовлетворения интерфейса.
 }
