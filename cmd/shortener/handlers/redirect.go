@@ -11,7 +11,7 @@ func RedirectHandler(store storage.Storage) http.HandlerFunc {
 		shortID := chi.URLParam(r, "id")
 		originalURL, ok := store.Get(shortID)
 		if !ok {
-			http.Error(w, "URL not found", http.StatusBadRequest)
+			w.WriteHeader(http.StatusGone)
 			return
 		}
 
