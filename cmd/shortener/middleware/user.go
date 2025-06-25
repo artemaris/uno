@@ -19,9 +19,11 @@ func WithUserIDMiddleware(secret string) func(http.Handler) http.Handler {
 			if err != nil || cookie.Value == "" {
 				userID = uuid.NewString()
 				http.SetCookie(w, &http.Cookie{
-					Name:  "auth_user",
-					Value: userID,
-					Path:  "/",
+					Name:     "auth_user",
+					Value:    userID,
+					Path:     "/",
+					HttpOnly: true,
+					SameSite: http.SameSiteLaxMode,
 				})
 			} else {
 				userID = cookie.Value

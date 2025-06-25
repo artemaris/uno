@@ -26,6 +26,7 @@ type record struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 	UserID      string `json:"user_id"`
+	DeletedFlag bool   `json:"deleted_flag"`
 }
 
 func NewFileStorage(path string) (Storage, error) {
@@ -71,6 +72,9 @@ func (fs *fileStorage) load() error {
 	for scanner.Scan() {
 		var r record
 		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
+			continue
+		}
+		if r.DeletedFlag {
 			continue
 		}
 		fs.originalToShort[r.OriginalURL] = r.ShortURL
@@ -153,6 +157,47 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string, userID string) error {
 		}
 		_, _ = fs.file.Write(append(jsonData, '\n'))
 	}
+	return nil
+}
+
+func (fs *fileStorage) DeleteURLs(userID string, ids []string) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	idsSet := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		idsSet[id] = struct{}{}
+	}
+
+	for _, uid := range []string{userID} {
+		urls, ok := fs.userURLs[uid]
+		if !ok {
+			continue
+		}
+		var updatedURLs []models.UserURL
+		for _, u := range urls {
+			if _, toDelete := idsSet[u.ShortURL]; toDelete {
+				// Mark as deleted and write record
+				rec := record{
+					UUID:        uuid.NewString(),
+					ShortURL:    u.ShortURL,
+					OriginalURL: u.OriginalURL,
+					UserID:      userID,
+					DeletedFlag: true,
+				}
+				jsonData, err := json.Marshal(rec)
+				if err == nil {
+					_, _ = fs.file.Write(append(jsonData, '\n'))
+				}
+				delete(fs.shortToOriginal, u.ShortURL)
+				delete(fs.originalToShort, u.OriginalURL)
+			} else {
+				updatedURLs = append(updatedURLs, u)
+			}
+		}
+		fs.userURLs[uid] = updatedURLs
+	}
+
 	return nil
 }
 

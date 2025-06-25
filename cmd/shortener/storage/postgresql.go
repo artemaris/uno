@@ -28,7 +28,8 @@ func (s *PostgresStorage) initSchema() error {
         CREATE TABLE IF NOT EXISTS public.short_urls (
             id varchar PRIMARY KEY,
             original_url varchar UNIQUE NOT NULL,
-            user_id varchar NOT NULL
+            user_id varchar NOT NULL,
+            is_deleted boolean DEFAULT false
         )
     `)
 	return err
@@ -50,7 +51,7 @@ func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
 func (s *PostgresStorage) FindByOriginal(originalURL string) (string, bool) {
 	var id string
 	err := s.conn.QueryRow(context.Background(),
-		`SELECT id FROM public.short_urls WHERE original_url = $1`, originalURL,
+		`SELECT id FROM public.short_urls WHERE original_url = $1 AND is_deleted = false`, originalURL,
 	).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false
@@ -83,7 +84,7 @@ func (s *PostgresStorage) SaveBatch(pairs map[string]string, userID string) erro
 func (s *PostgresStorage) Get(shortID string) (string, bool) {
 	var originalURL string
 	err := s.conn.QueryRow(context.Background(),
-		`SELECT original_url FROM public.short_urls WHERE id = $1`, shortID,
+		`SELECT original_url FROM public.short_urls WHERE id = $1 AND is_deleted = false`, shortID,
 	).Scan(&originalURL)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false
@@ -96,7 +97,7 @@ func (s *PostgresStorage) Get(shortID string) (string, bool) {
 
 func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	rows, err := s.conn.Query(context.Background(),
-		`SELECT id, original_url FROM public.short_urls WHERE user_id = $1`, userID)
+		`SELECT id, original_url FROM public.short_urls WHERE user_id = $1 AND is_deleted = false`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -114,4 +115,16 @@ func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 		})
 	}
 	return result, nil
+}
+
+func (s *PostgresStorage) DeleteURLs(userID string, shortIDs []string) error {
+	commandTag, err := s.conn.Exec(context.Background(),
+		`UPDATE public.short_urls SET is_deleted = true WHERE user_id = $1 AND id = ANY($2)`, userID, shortIDs)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("no rows updated")
+	}
+	return nil
 }

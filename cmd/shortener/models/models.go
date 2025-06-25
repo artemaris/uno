@@ -47,4 +47,5 @@ func MarshalBatchResponse(v []BatchResponse) ([]byte, error) {
 type UserURL struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+	Deleted     bool   `json:"-"`
 }

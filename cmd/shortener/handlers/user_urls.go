@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
 
 	"github.com/google/uuid"
@@ -20,19 +21,23 @@ func UserURLsHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc
 		}
 
 		urls, err := store.GetUserURLs(userID)
-		for i := range urls {
-			urls[i].ShortURL = cfg.BaseURL + "/" + urls[i].ShortURL
+		var filtered []models.UserURL
+		for _, url := range urls {
+			if !url.Deleted {
+				url.ShortURL = cfg.BaseURL + "/" + url.ShortURL
+				filtered = append(filtered, url)
+			}
 		}
 		if err != nil {
 			http.Error(w, "failed to get user URLs", http.StatusInternalServerError)
 			return
 		}
-		if len(urls) == 0 {
+		if len(filtered) == 0 {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		data, err := json.Marshal(urls)
+		data, err := json.Marshal(filtered)
 		if err != nil {
 			http.Error(w, "failed to encode response", http.StatusInternalServerError)
 			return
