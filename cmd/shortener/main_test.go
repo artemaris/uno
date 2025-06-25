@@ -85,8 +85,8 @@ func TestShortenAndRedirect(t *testing.T) {
 	respNonexist := httptest.NewRecorder()
 	handler.ServeHTTP(respNonexist, reqNonexist)
 
-	if respNonexist.Code != http.StatusBadRequest {
-		t.Fatalf("non-existent ID: expected %d, got %d", http.StatusBadRequest, respNonexist.Code)
+	if respNonexist.Code != http.StatusGone {
+		t.Fatalf("non-existent ID: expected %d, got %d", http.StatusGone, respNonexist.Code)
 	}
 }
 
