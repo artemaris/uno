@@ -11,28 +11,38 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+type deleteTask struct {
+	UserID    string
+	ShortURLs []string
+}
+
 type PostgresStorage struct {
-	conn *pgx.Conn
+	conn        *pgx.Conn
+	deleteQueue chan deleteTask
 }
 
 func NewPostgresStorage(conn *pgx.Conn) (Storage, error) {
-	s := &PostgresStorage{conn: conn}
+	s := &PostgresStorage{
+		conn:        conn,
+		deleteQueue: make(chan deleteTask, 100),
+	}
 	if err := s.initSchema(); err != nil {
 		return nil, fmt.Errorf("failed to init schema: %w", err)
 	}
 	return s, nil
 }
 
-func (s *PostgresStorage) initSchema() error {
-	_, err := s.conn.Exec(context.Background(), `
-        CREATE TABLE IF NOT EXISTS public.short_urls (
-            id varchar PRIMARY KEY,
-            original_url varchar UNIQUE NOT NULL,
-            user_id varchar NOT NULL,
-            is_deleted boolean DEFAULT false
-        )
-    `)
-	return err
+func (s *PostgresStorage) StartDeleteWorker(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case task := <-s.deleteQueue:
+				_ = s.DeleteURLs(task.UserID, task.ShortURLs)
+			}
+		}
+	}()
 }
 
 func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
@@ -127,4 +137,23 @@ func (s *PostgresStorage) DeleteURLs(userID string, shortIDs []string) error {
 		return fmt.Errorf("no rows updated")
 	}
 	return nil
+}
+
+func (s *PostgresStorage) AsyncDelete(userID string, shortIDs []string) {
+	s.deleteQueue <- deleteTask{
+		UserID:    userID,
+		ShortURLs: shortIDs,
+	}
+}
+
+func (s *PostgresStorage) initSchema() error {
+	_, err := s.conn.Exec(context.Background(), `
+        CREATE TABLE IF NOT EXISTS public.short_urls (
+            id varchar PRIMARY KEY,
+            original_url varchar UNIQUE NOT NULL,
+            user_id varchar NOT NULL,
+            is_deleted boolean DEFAULT false
+        )
+    `)
+	return err
 }

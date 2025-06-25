@@ -2,14 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"go.uber.org/zap"
 	"io"
-	"log"
 	"net/http"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
 )
 
-func DeleteUserURLsHandler(store storage.Storage) http.HandlerFunc {
+func DeleteUserURLsHandler(store storage.Storage, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
 		if !ok {
@@ -32,7 +32,7 @@ func DeleteUserURLsHandler(store storage.Storage) http.HandlerFunc {
 		go func() {
 			err := store.DeleteURLs(userID, ids)
 			if err != nil {
-				log.Println(err)
+				logger.Error("failed to delete URLs", zap.Error(err))
 			}
 		}()
 

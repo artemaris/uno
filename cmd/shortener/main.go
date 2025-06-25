@@ -45,6 +45,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
+		if ps, ok := store.(*storage.PostgresStorage); ok {
+			go ps.StartDeleteWorker(context.Background())
+		}
 	} else {
 		if cfg.FileStoragePath != "" {
 			s, err := storage.NewFileStorage(cfg.FileStoragePath)
@@ -64,7 +67,7 @@ func main() {
 	r.Get("/{id}", handlers.RedirectHandler(store))
 	r.Get("/ping", handlers.PingHandler(conn))
 	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
-	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store))
+	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
