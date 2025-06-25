@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,6 +20,7 @@ type fileStorage struct {
 	shortToOriginal map[string]string
 	file            *os.File
 	userURLs        map[string][]models.UserURL
+	deleteQueue     chan deleteRequest
 }
 
 type record struct {
@@ -27,6 +29,11 @@ type record struct {
 	OriginalURL string `json:"original_url"`
 	UserID      string `json:"user_id"`
 	DeletedFlag bool   `json:"deleted_flag"`
+}
+
+type deleteRequest struct {
+	userID string
+	ids    []string
 }
 
 func NewFileStorage(path string) (Storage, error) {
@@ -46,11 +53,14 @@ func NewFileStorage(path string) (Storage, error) {
 		shortToOriginal: make(map[string]string),
 		file:            file,
 		userURLs:        make(map[string][]models.UserURL),
+		deleteQueue:     make(chan deleteRequest, 100),
 	}
 
 	if err := fs.load(); err != nil {
 		return nil, err
 	}
+
+	go fs.runDeletionWorker()
 
 	return fs, nil
 }
@@ -161,28 +171,46 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string, userID string) error {
 }
 
 func (fs *fileStorage) DeleteURLs(userID string, ids []string) error {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	idsSet := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		idsSet[id] = struct{}{}
+	fs.deleteQueue <- deleteRequest{
+		userID: userID,
+		ids:    ids,
 	}
+	return nil
+}
 
-	for _, uid := range []string{userID} {
-		urls, ok := fs.userURLs[uid]
+func (fs *fileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	urls, ok := fs.userURLs[userID]
+	if !ok {
+		return nil, nil
+	}
+	return urls, nil
+}
+
+func (fs *fileStorage) runDeletionWorker() {
+	for req := range fs.deleteQueue {
+		fs.mu.Lock()
+
+		idsSet := make(map[string]struct{}, len(req.ids))
+		for _, id := range req.ids {
+			idsSet[id] = struct{}{}
+		}
+
+		urls, ok := fs.userURLs[req.userID]
 		if !ok {
+			fs.mu.Unlock()
 			continue
 		}
+
 		var updatedURLs []models.UserURL
 		for _, u := range urls {
 			if _, toDelete := idsSet[u.ShortURL]; toDelete {
-				// Mark as deleted and write record
 				rec := record{
 					UUID:        uuid.NewString(),
 					ShortURL:    u.ShortURL,
 					OriginalURL: u.OriginalURL,
-					UserID:      userID,
+					UserID:      req.userID,
 					DeletedFlag: true,
 				}
 				jsonData, err := json.Marshal(rec)
@@ -195,18 +223,49 @@ func (fs *fileStorage) DeleteURLs(userID string, ids []string) error {
 				updatedURLs = append(updatedURLs, u)
 			}
 		}
-		fs.userURLs[uid] = updatedURLs
+		fs.userURLs[req.userID] = updatedURLs
+		fs.mu.Unlock()
 	}
-
-	return nil
 }
 
-func (fs *fileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
-	fs.mu.RLock()
-	defer fs.mu.RUnlock()
-	urls, ok := fs.userURLs[userID]
-	if !ok {
-		return nil, nil
-	}
-	return urls, nil
+// RunDeletionWorker starts the background worker to process DeleteURLs requests.
+func (fs *fileStorage) RunDeletionWorker(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case req := <-fs.deleteQueue:
+				fs.mu.Lock()
+				idsSet := make(map[string]struct{}, len(req.ids))
+				for _, id := range req.ids {
+					idsSet[id] = struct{}{}
+				}
+				urls, ok := fs.userURLs[req.userID]
+				if ok {
+					var updated []models.UserURL
+					for _, u := range urls {
+						if _, del := idsSet[u.ShortURL]; del {
+							rec := record{
+								UUID:        uuid.NewString(),
+								ShortURL:    u.ShortURL,
+								OriginalURL: u.OriginalURL,
+								UserID:      req.userID,
+								DeletedFlag: true,
+							}
+							if b, err := json.Marshal(rec); err == nil {
+								fs.file.Write(append(b, '\n'))
+							}
+							delete(fs.shortToOriginal, u.ShortURL)
+							delete(fs.originalToShort, u.OriginalURL)
+						} else {
+							updated = append(updated, u)
+						}
+					}
+					fs.userURLs[req.userID] = updated
+				}
+				fs.mu.Unlock()
+			}
+		}
+	}()
 }

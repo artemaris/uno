@@ -53,6 +53,9 @@ func main() {
 			s, err := storage.NewFileStorage(cfg.FileStoragePath)
 			if err == nil {
 				store = s
+				if fs, ok := store.(*storage.PostgresStorage); ok {
+					go fs.RunDeletionWorker(context.Background())
+				}
 			}
 		}
 		if store == nil {
