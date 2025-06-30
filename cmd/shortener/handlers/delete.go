@@ -16,7 +16,7 @@ type deleteRequest struct {
 	ids    []string
 }
 
-func DeleteUserURLsHandler() http.HandlerFunc {
+func DeleteUserURLsHandler(store storage.Storage, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
 		if !ok {

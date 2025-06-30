@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 	"log"
 	"net/http"
 	"uno/cmd/shortener/config"
@@ -18,14 +18,14 @@ import (
 func main() {
 	cfg := config.NewConfig()
 
-	var conn *pgxpool.Pool
+	var conn *pgx.Conn
 	if cfg.DatabaseDSN != "" {
 		var err error
 		conn, err = db.NewPG(cfg.DatabaseDSN)
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
-		defer conn.Close()
+		defer conn.Close(context.Background())
 	}
 
 	logger, err := zap.NewProduction()
@@ -37,6 +37,7 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.WithUserID)
 	r.Use(middleware.LoggingMiddleware(logger))
 
 	var store storage.Storage
@@ -70,13 +71,14 @@ func main() {
 	r.Get("/{id}", handlers.RedirectHandler(store))
 	r.Get("/ping", handlers.PingHandler(conn))
 	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
-	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler())
+	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
 		Handler: r,
 	}
 
+	handlers.RunDeletionWorker(store, logger)
 	log.Println("Starting server on", cfg.Address)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
