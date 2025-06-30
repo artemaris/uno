@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type fileStorage struct {
+type FileStorage struct {
 	filePath        string
 	mu              sync.RWMutex
 	originalToShort map[string]string
@@ -41,7 +41,7 @@ func NewFileStorage(path string) (Storage, error) {
 		return nil, fmt.Errorf("failed to open file storage: %w", err)
 	}
 
-	fs := &fileStorage{
+	fs := &FileStorage{
 		filePath:        path,
 		originalToShort: make(map[string]string),
 		shortToOriginal: make(map[string]string),
@@ -56,7 +56,7 @@ func NewFileStorage(path string) (Storage, error) {
 	return fs, nil
 }
 
-func (fs *fileStorage) load() error {
+func (fs *FileStorage) load() error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -89,7 +89,7 @@ func (fs *fileStorage) load() error {
 	return scanner.Err()
 }
 
-func (fs *fileStorage) Save(shortID, originalURL, userID string) {
+func (fs *FileStorage) Save(shortID, originalURL, userID string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -115,11 +115,11 @@ func (fs *fileStorage) Save(shortID, originalURL, userID string) {
 		return
 	}
 	if _, err := fs.file.Write(append(jsonData, '\n')); err != nil {
-		log.Printf("fileStorage: failed to write record to file: %v", err)
+		log.Printf("FileStorage: failed to write record to file: %v", err)
 	}
 }
 
-func (fs *fileStorage) Get(shortID string) (string, bool, bool) {
+func (fs *FileStorage) Get(shortID string) (string, bool, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
@@ -139,14 +139,14 @@ func (fs *fileStorage) Get(shortID string) (string, bool, bool) {
 	return originalURL, false, true
 }
 
-func (fs *fileStorage) FindByOriginal(originalURL string) (string, bool) {
+func (fs *FileStorage) FindByOriginal(originalURL string) (string, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	id, ok := fs.originalToShort[originalURL]
 	return id, ok
 }
 
-func (fs *fileStorage) SaveBatch(pairs map[string]string, userID string) error {
+func (fs *FileStorage) SaveBatch(pairs map[string]string, userID string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -177,7 +177,7 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string, userID string) error {
 	return nil
 }
 
-func (fs *fileStorage) DeleteURLs(userID string, ids []string) error {
+func (fs *FileStorage) DeleteURLs(userID string, ids []string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -204,7 +204,7 @@ func (fs *fileStorage) DeleteURLs(userID string, ids []string) error {
 	return nil
 }
 
-func (fs *fileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
+func (fs *FileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	urls, ok := fs.userURLs[userID]

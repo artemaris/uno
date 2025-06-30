@@ -1,18 +1,21 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"uno/cmd/shortener/middleware"
+	"uno/cmd/shortener/storage"
 )
 
-type deleteRequest struct {
-	userID string
-	ids    []string
+type DeleteRequest struct {
+	UserID string
+	IDs    []string
 }
 
-func DeleteUserURLsHandler(deleteQueue chan<- deleteRequest) http.HandlerFunc {
+func DeleteUserURLsHandler(store storage.Storage, logger *zap.Logger, deleteQueue chan<- DeleteRequest) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
 		if !ok {
@@ -32,8 +35,28 @@ func DeleteUserURLsHandler(deleteQueue chan<- deleteRequest) http.HandlerFunc {
 			return
 		}
 
-		deleteQueue <- deleteRequest{userID: userID, ids: ids}
+		deleteQueue <- DeleteRequest{UserID: userID, IDs: ids}
 
 		w.WriteHeader(http.StatusAccepted)
+	}
+}
+
+func RunDeletionWorker(
+	ctx context.Context,
+	store storage.Storage,
+	logger *zap.Logger,
+	deleteQueue <-chan DeleteRequest,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req := <-deleteQueue:
+			go func(r DeleteRequest) {
+				if err := store.DeleteURLs(r.UserID, r.IDs); err != nil {
+					logger.Error("batch deletion failed", zap.Error(err))
+				}
+			}(req)
+		}
 	}
 }

@@ -33,6 +33,8 @@ func main() {
 	}
 	defer logger.Sync()
 
+	deleteQueue := make(chan handlers.DeleteRequest, 100)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.GzipMiddleware)
@@ -45,16 +47,16 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
-		if ps, ok := store.(*storage.PostgresStorage); ok {
-			go ps.RunDeletionWorker(context.Background())
+		if _, ok := store.(*storage.PostgresStorage); ok {
+			go handlers.RunDeletionWorker(context.Background(), store, logger, deleteQueue)
 		}
 	} else {
 		if cfg.FileStoragePath != "" {
 			s, err := storage.NewFileStorage(cfg.FileStoragePath)
 			if err == nil {
 				store = s
-				if fs, ok := store.(*storage.PostgresStorage); ok {
-					go fs.RunDeletionWorker(context.Background())
+				if _, ok := store.(*storage.FileStorage); ok {
+					go handlers.RunDeletionWorker(context.Background(), store, logger, deleteQueue)
 				}
 			}
 		}
@@ -69,7 +71,7 @@ func main() {
 	r.Get("/{id}", handlers.RedirectHandler(store))
 	r.Get("/ping", handlers.PingHandler(pool))
 	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
-	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler())
+	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger, deleteQueue))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
