@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"net/http"
 	"uno/cmd/shortener/config"
@@ -42,7 +43,8 @@ func main() {
 
 	var store storage.Storage
 	if conn != nil {
-		store, err = storage.NewPostgresStorage(conn)
+		pool, err := pgxpool.New(context.Background(), cfg.DatabaseDSN)
+		store, err := storage.NewPostgresStorage(pool)
 		if err != nil {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}

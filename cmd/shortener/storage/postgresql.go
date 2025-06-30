@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"uno/cmd/shortener/models"
 
 	"github.com/jackc/pgerrcode"
@@ -17,13 +18,13 @@ type deleteTask struct {
 }
 
 type PostgresStorage struct {
-	conn        *pgx.Conn
+	pool        *pgxpool.Pool
 	deleteQueue chan deleteTask
 }
 
-func NewPostgresStorage(conn *pgx.Conn) (Storage, error) {
+func NewPostgresStorage(conn *pgxpool.Pool) (Storage, error) {
 	s := &PostgresStorage{
-		conn:        conn,
+		pool:        conn,
 		deleteQueue: make(chan deleteTask, 100),
 	}
 	if err := s.initSchema(); err != nil {
@@ -33,7 +34,7 @@ func NewPostgresStorage(conn *pgx.Conn) (Storage, error) {
 }
 
 func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
-	_, err := s.conn.Exec(context.Background(),
+	_, err := s.pool.Exec(context.Background(),
 		`INSERT INTO public.short_urls (id, original_url, user_id) VALUES ($1, $2, $3)`,
 		shortID, originalURL, userID,
 	)
@@ -47,7 +48,7 @@ func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
 
 func (s *PostgresStorage) FindByOriginal(originalURL string) (string, bool) {
 	var id string
-	err := s.conn.QueryRow(context.Background(),
+	err := s.pool.QueryRow(context.Background(),
 		`SELECT id FROM public.short_urls WHERE original_url = $1 AND is_deleted = false`, originalURL,
 	).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -66,7 +67,7 @@ func (s *PostgresStorage) SaveBatch(pairs map[string]string, userID string) erro
                      ON CONFLICT (id) DO NOTHING`, shortID, originalURL, userID)
 	}
 
-	br := s.conn.SendBatch(context.Background(), batch)
+	br := s.pool.SendBatch(context.Background(), batch)
 	defer br.Close()
 
 	for range pairs {
@@ -82,7 +83,7 @@ func (s *PostgresStorage) Get(shortID string) (string, bool, bool) {
 	var originalURL string
 	var deleted bool
 
-	err := s.conn.QueryRow(context.Background(),
+	err := s.pool.QueryRow(context.Background(),
 		`SELECT original_url, is_deleted FROM public.short_urls WHERE id = $1`, shortID,
 	).Scan(&originalURL, &deleted)
 
@@ -97,7 +98,7 @@ func (s *PostgresStorage) Get(shortID string) (string, bool, bool) {
 }
 
 func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
-	rows, err := s.conn.Query(context.Background(),
+	rows, err := s.pool.Query(context.Background(),
 		`SELECT id, original_url FROM public.short_urls WHERE user_id = $1 AND is_deleted = false`, userID)
 	if err != nil {
 		return nil, err
@@ -119,7 +120,7 @@ func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 }
 
 func (s *PostgresStorage) DeleteURLs(userID string, shortIDs []string) error {
-	commandTag, err := s.conn.Exec(context.Background(),
+	commandTag, err := s.pool.Exec(context.Background(),
 		`UPDATE public.short_urls SET is_deleted = true WHERE user_id = $1 AND id = ANY($2)`, userID, shortIDs)
 	if err != nil {
 		return err
@@ -148,7 +149,7 @@ func (s *PostgresStorage) RunDeletionWorker(ctx context.Context) {
 }
 
 func (s *PostgresStorage) initSchema() error {
-	_, err := s.conn.Exec(context.Background(), `
+	_, err := s.pool.Exec(context.Background(), `
         CREATE TABLE IF NOT EXISTS public.short_urls (
             id varchar PRIMARY KEY,
             original_url varchar UNIQUE NOT NULL,
