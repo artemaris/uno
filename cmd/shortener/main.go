@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"net/http"
 	"uno/cmd/shortener/config"
-	"uno/cmd/shortener/db"
 	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
@@ -19,14 +17,14 @@ import (
 func main() {
 	cfg := config.NewConfig()
 
-	var conn *pgx.Conn
+	var pool *pgxpool.Pool
 	if cfg.DatabaseDSN != "" {
 		var err error
-		conn, err = db.NewPG(cfg.DatabaseDSN)
+		pool, err = pgxpool.New(context.Background(), cfg.DatabaseDSN)
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
-		defer conn.Close(context.Background())
+		defer pool.Close()
 	}
 
 	logger, err := zap.NewProduction()
@@ -42,9 +40,8 @@ func main() {
 	r.Use(middleware.LoggingMiddleware(logger))
 
 	var store storage.Storage
-	if conn != nil {
-		pool, err := pgxpool.New(context.Background(), cfg.DatabaseDSN)
-		store, err := storage.NewPostgresStorage(pool)
+	if pool != nil {
+		store, err = storage.NewPostgresStorage(pool)
 		if err != nil {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
@@ -66,12 +63,11 @@ func main() {
 		}
 	}
 
-	r.Use(middleware.WithUserID)
 	r.Post("/", handlers.ShortenURLHandler(cfg, store))
 	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
 	r.Post("/api/shorten/batch", handlers.BatchShortenHandler(cfg, store))
 	r.Get("/{id}", handlers.RedirectHandler(store))
-	r.Get("/ping", handlers.PingHandler(conn))
+	r.Get("/ping", handlers.PingHandler(pool))
 	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
 	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger))
 
@@ -80,7 +76,6 @@ func main() {
 		Handler: r,
 	}
 
-	handlers.RunDeletionWorker(store, logger)
 	log.Println("Starting server on", cfg.Address)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
