@@ -1,4 +1,4 @@
-package tests
+package handlers
 
 import (
 	"net/http"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"uno/cmd/shortener/config"
-	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
 
@@ -16,9 +15,9 @@ import (
 
 func setupShortenRouter(cfg *config.Config, store storage.Storage) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.WithUserIDMiddleware("supersecret"))
-	r.Post("/", handlers.ShortenURLHandler(cfg, store))
-	r.Get("/{id}", handlers.RedirectHandler(store))
+	r.Use(middleware.WithUserID)
+	r.Post("/", ShortenURLHandler(cfg, store))
+	r.Get("/{id}", RedirectHandler(store))
 	return r
 }
 
@@ -56,7 +55,7 @@ func TestShortenAndRedirect(t *testing.T) {
 	badReq := httptest.NewRequest(http.MethodGet, "/notfound", nil)
 	badRes := httptest.NewRecorder()
 	handler.ServeHTTP(badRes, badReq)
-	if badRes.Code != http.StatusGone {
-		t.Fatalf("GET /notfound expected %d, got %d", http.StatusGone, badRes.Code)
+	if badRes.Code != http.StatusNotFound {
+		t.Fatalf("GET /notfound expected %d, got %d", http.StatusNotFound, badRes.Code)
 	}
 }

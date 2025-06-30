@@ -37,6 +37,7 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.WithUserID)
 	r.Use(middleware.LoggingMiddleware(logger))
 
 	var store storage.Storage
@@ -63,7 +64,7 @@ func main() {
 		}
 	}
 
-	r.Use(middleware.WithUserIDMiddleware("supersecret"))
+	r.Use(middleware.WithUserID)
 	r.Post("/", handlers.ShortenURLHandler(cfg, store))
 	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
 	r.Post("/api/shorten/batch", handlers.BatchShortenHandler(cfg, store))
@@ -77,6 +78,7 @@ func main() {
 		Handler: r,
 	}
 
+	handlers.RunDeletionWorker(store, logger)
 	log.Println("Starting server on", cfg.Address)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -112,14 +113,29 @@ func (fs *fileStorage) Save(shortID, originalURL, userID string) {
 	if err != nil {
 		return
 	}
-	_, _ = fs.file.Write(append(jsonData, '\n'))
+	if _, err := fs.file.Write(append(jsonData, '\n')); err != nil {
+		log.Printf("fileStorage: failed to write record to file: %v", err)
+	}
 }
 
-func (fs *fileStorage) Get(shortID string) (string, bool) {
+func (fs *fileStorage) Get(shortID string) (string, bool, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
-	url, ok := fs.shortToOriginal[shortID]
-	return url, ok
+
+	originalURL, exists := fs.shortToOriginal[shortID]
+	if !exists {
+		return "", false, false
+	}
+
+	for _, urls := range fs.userURLs {
+		for _, url := range urls {
+			if url.ShortURL == shortID {
+				return originalURL, url.Deleted, true
+			}
+		}
+	}
+
+	return originalURL, false, true
 }
 
 func (fs *fileStorage) FindByOriginal(originalURL string) (string, bool) {

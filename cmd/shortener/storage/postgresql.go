@@ -78,18 +78,22 @@ func (s *PostgresStorage) SaveBatch(pairs map[string]string, userID string) erro
 	return nil
 }
 
-func (s *PostgresStorage) Get(shortID string) (string, bool) {
+func (s *PostgresStorage) Get(shortID string) (string, bool, bool) {
 	var originalURL string
+	var deleted bool
+
 	err := s.conn.QueryRow(context.Background(),
-		`SELECT original_url FROM public.short_urls WHERE id = $1 AND is_deleted = false`, shortID,
-	).Scan(&originalURL)
+		`SELECT original_url, is_deleted FROM public.short_urls WHERE id = $1`, shortID,
+	).Scan(&originalURL, &deleted)
+
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false
+		return "", false, false
 	}
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
-	return originalURL, true
+
+	return originalURL, deleted, true
 }
 
 func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
@@ -124,13 +128,6 @@ func (s *PostgresStorage) DeleteURLs(userID string, shortIDs []string) error {
 		return fmt.Errorf("no rows updated")
 	}
 	return nil
-}
-
-func (s *PostgresStorage) AsyncDelete(userID string, shortIDs []string) {
-	s.deleteQueue <- deleteTask{
-		UserID:    userID,
-		ShortURLs: shortIDs,
-	}
 }
 
 func (s *PostgresStorage) RunDeletionWorker(ctx context.Context) {

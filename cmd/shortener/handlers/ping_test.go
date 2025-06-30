@@ -1,4 +1,4 @@
-package tests
+package handlers
 
 import (
 	"context"
@@ -6,15 +6,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"uno/cmd/shortener/handlers"
-
 	"github.com/jackc/pgx/v5"
 )
 
 func TestPingHandler(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	res1 := httptest.NewRecorder()
-	h1 := handlers.PingHandler(nil)
+	h1 := PingHandler(nil)
 	h1.ServeHTTP(res1, req1)
 	if res1.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", res1.Code)
@@ -26,7 +24,7 @@ func TestPingHandler(t *testing.T) {
 	}
 	req2 := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	res2 := httptest.NewRecorder()
-	h2 := handlers.PingHandler(conn)
+	h2 := PingHandler(conn)
 	h2.ServeHTTP(res2, req2)
 	expected := http.StatusInternalServerError
 	if conn == nil {

@@ -12,7 +12,7 @@ func TestFileStorage_SaveAndGet(t *testing.T) {
 
 	store, err := NewFileStorage(testFile)
 	if err != nil {
-		t.Fatalf("failed to create file storage: %v", err)
+		t.Errorf("failed to create file storage: %v", err)
 	}
 
 	shortID := "abc123"
@@ -21,20 +21,23 @@ func TestFileStorage_SaveAndGet(t *testing.T) {
 
 	store.Save(shortID, originalURL, userID)
 
-	got, ok := store.Get(shortID)
-	if !ok {
-		t.Fatal("expected key to be found")
+	got, deleted, exists := store.Get(shortID)
+	if !exists {
+		t.Error("expected key to be found")
+	}
+	if deleted {
+		t.Error("expected URL not to be deleted")
 	}
 	if got != originalURL {
-		t.Fatalf("expected %s, got %s", originalURL, got)
+		t.Errorf("expected %s, got %s", originalURL, got)
 	}
 
 	urls, err := store.GetUserURLs(userID)
 	if err != nil {
-		t.Fatalf("failed to get user URLs: %v", err)
+		t.Errorf("failed to get user URLs: %v", err)
 	}
 	if len(urls) != 1 {
-		t.Fatalf("expected 1 URL for user, got %d", len(urls))
+		t.Errorf("expected 1 URL for user, got %d", len(urls))
 	}
 	if urls[0].ShortURL != shortID || urls[0].OriginalURL != originalURL {
 		t.Errorf("unexpected user URL: %+v", urls[0])
@@ -42,7 +45,7 @@ func TestFileStorage_SaveAndGet(t *testing.T) {
 
 	data, err := os.ReadFile(testFile)
 	if err != nil {
-		t.Fatalf("failed to read file: %v", err)
+		t.Errorf("failed to read file: %v", err)
 	}
 	content := string(data)
 	if !strings.Contains(content, shortID) || !strings.Contains(content, originalURL) {
@@ -56,7 +59,7 @@ func TestFileStorage_DeleteURLs(t *testing.T) {
 
 	store, err := NewFileStorage(testFile)
 	if err != nil {
-		t.Fatalf("failed to create file storage: %v", err)
+		t.Errorf("failed to create file storage: %v", err)
 	}
 
 	userID := "user1"
@@ -72,23 +75,28 @@ func TestFileStorage_DeleteURLs(t *testing.T) {
 	// Delete one
 	err = store.DeleteURLs(userID, []string{shortID1})
 	if err != nil {
-		t.Fatalf("failed to delete URL: %v", err)
+		t.Errorf("failed to delete URL: %v", err)
 	}
 
-	// Check Get returns nothing for deleted
-	if _, ok := store.Get(shortID1); ok {
-		t.Errorf("expected deleted shortID1 to be absent")
+	// Check Get returns deleted flag for deleted
+	_, deleted, exists := store.Get(shortID1)
+	if !exists {
+		t.Error("expected shortID1 to exist")
+	}
+	if !deleted {
+		t.Error("expected shortID1 to be marked as deleted")
 	}
 
 	// Check Get returns remaining one
-	if val, ok := store.Get(shortID2); !ok || val != originalURL2 {
-		t.Errorf("expected shortID2 to be present")
+	val, deleted, exists := store.Get(shortID2)
+	if !exists || deleted || val != originalURL2 {
+		t.Errorf("expected shortID2 to be present and not deleted")
 	}
 
 	// Check GetUserURLs returns only undeleted URL
 	urls, err := store.GetUserURLs(userID)
 	if err != nil {
-		t.Fatalf("failed to get user URLs: %v", err)
+		t.Errorf("failed to get user URLs: %v", err)
 	}
 	if len(urls) != 1 || urls[0].ShortURL != shortID2 {
 		t.Errorf("unexpected result from GetUserURLs: %+v", urls)

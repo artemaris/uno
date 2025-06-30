@@ -9,8 +9,14 @@ import (
 func RedirectHandler(store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		shortID := chi.URLParam(r, "id")
-		originalURL, ok := store.Get(shortID)
-		if !ok {
+		originalURL, deleted, exists := store.Get(shortID)
+
+		if !exists {
+			http.NotFound(w, r)
+			return
+		}
+
+		if deleted {
 			w.WriteHeader(http.StatusGone)
 			return
 		}

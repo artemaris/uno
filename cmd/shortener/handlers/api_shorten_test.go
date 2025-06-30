@@ -1,4 +1,4 @@
-package tests
+package handlers
 
 import (
 	"net/http"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"uno/cmd/shortener/config"
-	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
 
@@ -16,8 +15,8 @@ import (
 
 func setupAPIShortenRouter(cfg *config.Config, store storage.Storage) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.WithUserIDMiddleware("supersecret"))
-	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
+	r.Use(middleware.WithUserID)
+	r.Post("/api/shorten", APIShortenHandler(cfg, store))
 	return r
 }
 

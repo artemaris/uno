@@ -8,7 +8,7 @@ import (
 
 type Storage interface {
 	Save(shortID, originalURL, userID string)
-	Get(shortID string) (string, bool)
+	Get(shortID string) (originalURL string, deleted bool, exists bool)
 	FindByOriginal(originalURL string) (string, bool)
 	SaveBatch(pairs map[string]string, userID string) error
 	GetUserURLs(userID string) ([]models.UserURL, error)
@@ -41,14 +41,17 @@ func (s *InMemoryStorage) Save(shortID, originalURL, userID string) {
 	s.deleted[shortID] = false
 }
 
-func (s *InMemoryStorage) Get(shortID string) (string, bool) {
+func (s *InMemoryStorage) Get(shortID string) (string, bool, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.deleted[shortID] {
-		return "", false
+
+	url, exists := s.data[shortID]
+	if !exists {
+		return "", false, false
 	}
-	url, ok := s.data[shortID]
-	return url, ok
+
+	deleted := s.deleted[shortID]
+	return url, deleted, true
 }
 
 func (s *InMemoryStorage) FindByOriginal(originalURL string) (string, bool) {

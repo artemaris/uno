@@ -9,6 +9,13 @@ import (
 	"uno/cmd/shortener/storage"
 )
 
+var deleteQueue = make(chan deleteRequest, 100)
+
+type deleteRequest struct {
+	userID string
+	ids    []string
+}
+
 func DeleteUserURLsHandler(store storage.Storage, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
@@ -29,13 +36,19 @@ func DeleteUserURLsHandler(store storage.Storage, logger *zap.Logger) http.Handl
 			return
 		}
 
-		go func() {
-			err := store.DeleteURLs(userID, ids)
-			if err != nil {
-				logger.Error("failed to delete URLs", zap.Error(err))
-			}
-		}()
+		deleteQueue <- deleteRequest{userID: userID, ids: ids}
 
 		w.WriteHeader(http.StatusAccepted)
 	}
+}
+
+func RunDeletionWorker(store storage.Storage, logger *zap.Logger) {
+	go func() {
+		for req := range deleteQueue {
+			err := store.DeleteURLs(req.userID, req.ids)
+			if err != nil {
+				logger.Error("batch deletion failed", zap.Error(err))
+			}
+		}
+	}()
 }

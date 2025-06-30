@@ -1,4 +1,4 @@
-package tests
+package handlers
 
 import (
 	"compress/gzip"
@@ -8,10 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"uno/cmd/shortener/middleware"
 
 	"uno/cmd/shortener/config"
-	"uno/cmd/shortener/handlers"
-	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
 
@@ -20,9 +19,9 @@ import (
 
 func setupGzipRouter(cfg *config.Config, store storage.Storage) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.WithUserIDMiddleware("supersecret"))
+	r.Use(middleware.WithUserID)
 	r.Use(middleware.GzipMiddleware)
-	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
+	r.Post("/api/shorten", APIShortenHandler(cfg, store))
 	return r
 }
 

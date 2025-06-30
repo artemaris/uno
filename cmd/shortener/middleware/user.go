@@ -9,33 +9,31 @@ import (
 
 type contextKey string
 
-const userIDKey contextKey = "userID"
+const ContextUserIDKey contextKey = "userID"
+const userIDCookieName = "auth_user"
 
-func WithUserIDMiddleware(secret string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var userID string
-			cookie, err := r.Cookie("auth_user")
-			if err != nil || cookie.Value == "" {
-				userID = uuid.NewString()
-				http.SetCookie(w, &http.Cookie{
-					Name:     "auth_user",
-					Value:    userID,
-					Path:     "/",
-					HttpOnly: true,
-					SameSite: http.SameSiteLaxMode,
-				})
-			} else {
-				userID = cookie.Value
-			}
+func WithUserID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie(userIDCookieName)
+		userID := ""
 
-			ctx := context.WithValue(r.Context(), userIDKey, userID)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
+		if err != nil || cookie.Value == "" {
+			userID = uuid.NewString()
+			http.SetCookie(w, &http.Cookie{
+				Name:  userIDCookieName,
+				Value: userID,
+				Path:  "/",
+			})
+		} else {
+			userID = cookie.Value
+		}
+
+		ctx := context.WithValue(r.Context(), ContextUserIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func FromContext(ctx context.Context) (string, bool) {
-	id, ok := ctx.Value(userIDKey).(string)
-	return id, ok
+	userID, ok := ctx.Value(ContextUserIDKey).(string)
+	return userID, ok
 }
