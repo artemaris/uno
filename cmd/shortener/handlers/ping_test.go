@@ -26,7 +26,7 @@ func TestPingHandler(t *testing.T) {
 	res2 := httptest.NewRecorder()
 	h2 := PingHandler(pool)
 	h2.ServeHTTP(res2, req2)
-	expected := http.StatusInternalServerError
+	expected := http.StatusServiceUnavailable
 	if pool == nil {
 		expected = http.StatusOK
 	}
