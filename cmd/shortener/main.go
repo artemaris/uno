@@ -70,7 +70,7 @@ func main() {
 	r.Get("/{id}", handlers.RedirectHandler(store))
 	r.Get("/ping", handlers.PingHandler(conn))
 	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
-	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger))
+	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler())
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
