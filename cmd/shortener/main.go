@@ -37,7 +37,6 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.GzipMiddleware)
-	r.Use(middleware.WithUserID)
 	r.Use(middleware.LoggingMiddleware(logger))
 
 	var store storage.Storage
