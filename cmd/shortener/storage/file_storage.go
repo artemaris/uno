@@ -75,15 +75,16 @@ func (fs *fileStorage) load() error {
 		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
 			continue
 		}
-		if r.DeletedFlag {
-			continue
-		}
-		fs.originalToShort[r.OriginalURL] = r.ShortURL
-		fs.shortToOriginal[r.ShortURL] = r.OriginalURL
-		fs.userURLs[r.UserID] = append(fs.userURLs[r.UserID], models.UserURL{
+		u := models.UserURL{
 			ShortURL:    r.ShortURL,
 			OriginalURL: r.OriginalURL,
-		})
+			Deleted:     r.DeletedFlag,
+		}
+		fs.userURLs[r.UserID] = append(fs.userURLs[r.UserID], u)
+		if !r.DeletedFlag {
+			fs.originalToShort[r.OriginalURL] = r.ShortURL
+			fs.shortToOriginal[r.ShortURL] = r.OriginalURL
+		}
 	}
 	return scanner.Err()
 }
@@ -185,9 +186,9 @@ func (fs *fileStorage) DeleteURLs(userID string, ids []string) error {
 		toDelete[id] = struct{}{}
 	}
 
-	var kept []models.UserURL
-	for _, u := range fs.userURLs[userID] {
-		if _, del := toDelete[u.ShortURL]; del {
+	for i, u := range fs.userURLs[userID] {
+		if _, del := toDelete[u.ShortURL]; del && !u.Deleted {
+			fs.userURLs[userID][i].Deleted = true
 			rec := record{
 				UUID:        uuid.NewString(),
 				ShortURL:    u.ShortURL,
@@ -198,13 +199,8 @@ func (fs *fileStorage) DeleteURLs(userID string, ids []string) error {
 			if b, err := json.Marshal(rec); err == nil {
 				fs.file.Write(append(b, '\n'))
 			}
-			delete(fs.shortToOriginal, u.ShortURL)
-			delete(fs.originalToShort, u.OriginalURL)
-		} else {
-			kept = append(kept, u)
 		}
 	}
-	fs.userURLs[userID] = kept
 	return nil
 }
 
@@ -215,5 +211,12 @@ func (fs *fileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	if !ok {
 		return nil, nil
 	}
-	return urls, nil
+
+	var filtered []models.UserURL
+	for _, u := range urls {
+		if !u.Deleted {
+			filtered = append(filtered, u)
+		}
+	}
+	return filtered, nil
 }

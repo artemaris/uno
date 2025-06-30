@@ -68,17 +68,14 @@ func TestFileStorage_DeleteURLs(t *testing.T) {
 	originalURL1 := "https://example.com/1"
 	originalURL2 := "https://example.com/2"
 
-	// Save two URLs
 	store.Save(shortID1, originalURL1, userID)
 	store.Save(shortID2, originalURL2, userID)
 
-	// Delete one
 	err = store.DeleteURLs(userID, []string{shortID1})
 	if err != nil {
 		t.Errorf("failed to delete URL: %v", err)
 	}
 
-	// Check Get returns deleted flag for deleted
 	_, deleted, exists := store.Get(shortID1)
 	if !exists {
 		t.Error("expected shortID1 to exist")
@@ -87,13 +84,11 @@ func TestFileStorage_DeleteURLs(t *testing.T) {
 		t.Error("expected shortID1 to be marked as deleted")
 	}
 
-	// Check Get returns remaining one
 	val, deleted, exists := store.Get(shortID2)
 	if !exists || deleted || val != originalURL2 {
 		t.Errorf("expected shortID2 to be present and not deleted")
 	}
 
-	// Check GetUserURLs returns only undeleted URL
 	urls, err := store.GetUserURLs(userID)
 	if err != nil {
 		t.Errorf("failed to get user URLs: %v", err)

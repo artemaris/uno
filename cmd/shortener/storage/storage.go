@@ -95,8 +95,15 @@ func (s *InMemoryStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 func (s *InMemoryStorage) DeleteURLs(userID string, ids []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	idSet := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
+		idSet[id] = struct{}{}
 		s.deleted[id] = true
+	}
+	for i, url := range s.users[userID] {
+		if _, ok := idSet[url.ShortURL]; ok {
+			s.users[userID][i].Deleted = true
+		}
 	}
 	return nil
 }
