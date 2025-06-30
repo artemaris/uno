@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"uno/cmd/shortener/models"
 
 	"github.com/jackc/pgerrcode"
@@ -17,11 +18,11 @@ type deleteTask struct {
 }
 
 type PostgresStorage struct {
-	conn        *pgx.Conn
+	conn        *pgxpool.Pool
 	deleteQueue chan deleteTask
 }
 
-func NewPostgresStorage(conn *pgx.Conn) (Storage, error) {
+func NewPostgresStorage(conn *pgxpool.Pool) (Storage, error) {
 	s := &PostgresStorage{
 		conn:        conn,
 		deleteQueue: make(chan deleteTask, 100),

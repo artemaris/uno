@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
 	"time"
 )
 
-func PingHandler(conn *pgx.Conn) http.HandlerFunc {
+func PingHandler(conn *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if conn == nil {
 			w.WriteHeader(http.StatusOK)

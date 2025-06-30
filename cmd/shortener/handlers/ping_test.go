@@ -2,11 +2,10 @@ package handlers
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/jackc/pgx/v5"
 )
 
 func TestPingHandler(t *testing.T) {
@@ -18,16 +17,18 @@ func TestPingHandler(t *testing.T) {
 		t.Fatalf("expected 200, got %d", res1.Code)
 	}
 
-	conn, err := pgx.Connect(context.Background(), "postgres://invalid")
+	badDSN := "postgres://invalid"
+	pool, err := pgxpool.New(context.Background(), badDSN)
 	if err == nil {
-		defer conn.Close(context.Background())
+		defer pool.Close()
 	}
 	req2 := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	res2 := httptest.NewRecorder()
-	h2 := PingHandler(conn)
+	h2 := PingHandler(pool)
 	h2.ServeHTTP(res2, req2)
-	expected := http.StatusInternalServerError
-	if conn == nil {
+
+	expected := http.StatusServiceUnavailable
+	if pool == nil {
 		expected = http.StatusOK
 	}
 	if res2.Code != expected {

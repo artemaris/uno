@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"net/http"
 	"uno/cmd/shortener/config"
@@ -18,14 +18,14 @@ import (
 func main() {
 	cfg := config.NewConfig()
 
-	var conn *pgx.Conn
+	var conn *pgxpool.Pool
 	if cfg.DatabaseDSN != "" {
 		var err error
 		conn, err = db.NewPG(cfg.DatabaseDSN)
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
-		defer conn.Close(context.Background())
+		defer conn.Close()
 	}
 
 	logger, err := zap.NewProduction()
@@ -78,7 +78,6 @@ func main() {
 		Handler: r,
 	}
 
-	handlers.RunDeletionWorker(store, logger)
 	log.Println("Starting server on", cfg.Address)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)

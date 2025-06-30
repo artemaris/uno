@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,12 +47,11 @@ func TestWithUserIDMiddleware(t *testing.T) {
 			handler.ServeHTTP(recorder, req)
 
 			res := recorder.Result()
-			defer func(Body io.ReadCloser) {
-				err := Body.Close()
-				if err != nil {
+			if res.Body != nil {
+				if err := res.Body.Close(); err != nil {
 					t.Errorf("failed to close response body: %v", err)
 				}
-			}(res.Body)
+			}
 			cookies := res.Cookies()
 
 			if tc.expectNewCookie {
