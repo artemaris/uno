@@ -8,8 +8,11 @@ import (
 const idLength = 8
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 func GenerateShortID() string {
-	rand.NewSource(time.Now().UnixNano())
 	id := make([]byte, idLength)
 	for i := range id {
 		id[i] = charset[rand.Intn(len(charset))]

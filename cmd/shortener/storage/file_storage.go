@@ -20,6 +20,7 @@ type FileStorage struct {
 	shortToOriginal map[string]string
 	file            *os.File
 	userURLs        map[string][]models.UserURL
+	deleted         map[string]bool
 }
 
 type record struct {
@@ -47,6 +48,7 @@ func NewFileStorage(path string) (Storage, error) {
 		shortToOriginal: make(map[string]string),
 		file:            file,
 		userURLs:        make(map[string][]models.UserURL),
+		deleted:         make(map[string]bool),
 	}
 
 	if err := fs.load(); err != nil {
@@ -62,6 +64,9 @@ func (fs *FileStorage) load() error {
 
 	if fs.userURLs == nil {
 		fs.userURLs = make(map[string][]models.UserURL)
+	}
+	if fs.deleted == nil {
+		fs.deleted = make(map[string]bool)
 	}
 
 	_, err := fs.file.Seek(0, 0)
@@ -81,10 +86,13 @@ func (fs *FileStorage) load() error {
 			Deleted:     r.DeletedFlag,
 		}
 		fs.userURLs[r.UserID] = append(fs.userURLs[r.UserID], u)
-		if !r.DeletedFlag {
-			fs.originalToShort[r.OriginalURL] = r.ShortURL
-			fs.shortToOriginal[r.ShortURL] = r.OriginalURL
+		if r.DeletedFlag {
+			fs.deleted[r.ShortURL] = true
+			continue
 		}
+		fs.originalToShort[r.OriginalURL] = r.ShortURL
+		fs.shortToOriginal[r.ShortURL] = r.OriginalURL
+		fs.deleted[r.ShortURL] = false
 	}
 	return scanner.Err()
 }
@@ -110,6 +118,7 @@ func (fs *FileStorage) Save(shortID, originalURL, userID string) {
 		ShortURL:    shortID,
 		OriginalURL: originalURL,
 	})
+	fs.deleted[shortID] = false
 	jsonData, err := json.Marshal(rec)
 	if err != nil {
 		return
@@ -128,15 +137,8 @@ func (fs *FileStorage) Get(shortID string) (string, bool, bool) {
 		return "", false, false
 	}
 
-	for _, urls := range fs.userURLs {
-		for _, url := range urls {
-			if url.ShortURL == shortID {
-				return originalURL, url.Deleted, true
-			}
-		}
-	}
-
-	return originalURL, false, true
+	deleted := fs.deleted[shortID]
+	return originalURL, deleted, true
 }
 
 func (fs *FileStorage) FindByOriginal(originalURL string) (string, bool) {
@@ -168,6 +170,7 @@ func (fs *FileStorage) SaveBatch(pairs map[string]string, userID string) error {
 			ShortURL:    shortID,
 			OriginalURL: originalURL,
 		})
+		fs.deleted[shortID] = false
 		jsonData, err := json.Marshal(rec)
 		if err != nil {
 			continue
@@ -187,8 +190,9 @@ func (fs *FileStorage) DeleteURLs(userID string, ids []string) error {
 	}
 
 	for i, u := range fs.userURLs[userID] {
-		if _, del := toDelete[u.ShortURL]; del && !u.Deleted {
+		if _, del := toDelete[u.ShortURL]; del && !fs.deleted[u.ShortURL] {
 			fs.userURLs[userID][i].Deleted = true
+			fs.deleted[u.ShortURL] = true
 			rec := record{
 				UUID:        uuid.NewString(),
 				ShortURL:    u.ShortURL,
