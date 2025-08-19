@@ -4,25 +4,30 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
+	"uno/cmd/shortener/models"
 
 	"github.com/google/uuid"
 )
 
-type fileStorage struct {
+type FileStorage struct {
 	filePath        string
 	mu              sync.RWMutex
 	originalToShort map[string]string
 	shortToOriginal map[string]string
 	file            *os.File
+	userURLs        map[string][]models.UserURL
 }
 
 type record struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+	UserID      string `json:"user_id"`
+	DeletedFlag bool   `json:"deleted_flag"`
 }
 
 func NewFileStorage(path string) (Storage, error) {
@@ -36,11 +41,12 @@ func NewFileStorage(path string) (Storage, error) {
 		return nil, fmt.Errorf("failed to open file storage: %w", err)
 	}
 
-	fs := &fileStorage{
+	fs := &FileStorage{
 		filePath:        path,
 		originalToShort: make(map[string]string),
 		shortToOriginal: make(map[string]string),
 		file:            file,
+		userURLs:        make(map[string][]models.UserURL),
 	}
 
 	if err := fs.load(); err != nil {
@@ -50,28 +56,43 @@ func NewFileStorage(path string) (Storage, error) {
 	return fs, nil
 }
 
-func (fs *fileStorage) load() error {
+func (fs *FileStorage) load() error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	fs.file.Seek(0, 0)
+	if fs.userURLs == nil {
+		fs.userURLs = make(map[string][]models.UserURL)
+	}
+
+	_, err := fs.file.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+
 	scanner := bufio.NewScanner(fs.file)
 	for scanner.Scan() {
 		var r record
 		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
 			continue
 		}
-		fs.originalToShort[r.OriginalURL] = r.ShortURL
-		fs.shortToOriginal[r.ShortURL] = r.OriginalURL
+		u := models.UserURL{
+			ShortURL:    r.ShortURL,
+			OriginalURL: r.OriginalURL,
+			Deleted:     r.DeletedFlag,
+		}
+		fs.userURLs[r.UserID] = append(fs.userURLs[r.UserID], u)
+		if !r.DeletedFlag {
+			fs.originalToShort[r.OriginalURL] = r.ShortURL
+			fs.shortToOriginal[r.ShortURL] = r.OriginalURL
+		}
 	}
 	return scanner.Err()
 }
 
-func (fs *fileStorage) Save(shortID, originalURL string) {
+func (fs *FileStorage) Save(shortID, originalURL, userID string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	// не сохраняем повторно
 	if _, exists := fs.originalToShort[originalURL]; exists {
 		return
 	}
@@ -83,29 +104,49 @@ func (fs *fileStorage) Save(shortID, originalURL string) {
 		UUID:        uuid.NewString(),
 		ShortURL:    shortID,
 		OriginalURL: originalURL,
+		UserID:      userID,
 	}
+	fs.userURLs[userID] = append(fs.userURLs[userID], models.UserURL{
+		ShortURL:    shortID,
+		OriginalURL: originalURL,
+	})
 	jsonData, err := json.Marshal(rec)
 	if err != nil {
 		return
 	}
-	fs.file.Write(append(jsonData, '\n'))
+	if _, err := fs.file.Write(append(jsonData, '\n')); err != nil {
+		log.Printf("FileStorage: failed to write record to file: %v", err)
+	}
 }
 
-func (fs *fileStorage) Get(shortID string) (string, bool) {
+func (fs *FileStorage) Get(shortID string) (string, bool, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
-	url, ok := fs.shortToOriginal[shortID]
-	return url, ok
+
+	originalURL, exists := fs.shortToOriginal[shortID]
+	if !exists {
+		return "", false, false
+	}
+
+	for _, urls := range fs.userURLs {
+		for _, url := range urls {
+			if url.ShortURL == shortID {
+				return originalURL, url.Deleted, true
+			}
+		}
+	}
+
+	return originalURL, false, true
 }
 
-func (fs *fileStorage) FindByOriginal(originalURL string) (string, bool) {
+func (fs *FileStorage) FindByOriginal(originalURL string) (string, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	id, ok := fs.originalToShort[originalURL]
 	return id, ok
 }
 
-func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
+func (fs *FileStorage) SaveBatch(pairs map[string]string, userID string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -121,12 +162,61 @@ func (fs *fileStorage) SaveBatch(pairs map[string]string) error {
 			UUID:        uuid.NewString(),
 			ShortURL:    shortID,
 			OriginalURL: originalURL,
+			UserID:      userID,
 		}
+		fs.userURLs[userID] = append(fs.userURLs[userID], models.UserURL{
+			ShortURL:    shortID,
+			OriginalURL: originalURL,
+		})
 		jsonData, err := json.Marshal(rec)
 		if err != nil {
 			continue
 		}
-		fs.file.Write(append(jsonData, '\n'))
+		_, _ = fs.file.Write(append(jsonData, '\n'))
 	}
 	return nil
+}
+
+func (fs *FileStorage) DeleteURLs(userID string, ids []string) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	toDelete := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		toDelete[id] = struct{}{}
+	}
+
+	for i, u := range fs.userURLs[userID] {
+		if _, del := toDelete[u.ShortURL]; del && !u.Deleted {
+			fs.userURLs[userID][i].Deleted = true
+			rec := record{
+				UUID:        uuid.NewString(),
+				ShortURL:    u.ShortURL,
+				OriginalURL: u.OriginalURL,
+				UserID:      userID,
+				DeletedFlag: true,
+			}
+			if b, err := json.Marshal(rec); err == nil {
+				fs.file.Write(append(b, '\n'))
+			}
+		}
+	}
+	return nil
+}
+
+func (fs *FileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	urls, ok := fs.userURLs[userID]
+	if !ok {
+		return nil, nil
+	}
+
+	var filtered []models.UserURL
+	for _, u := range urls {
+		if !u.Deleted {
+			filtered = append(filtered, u)
+		}
+	}
+	return filtered, nil
 }

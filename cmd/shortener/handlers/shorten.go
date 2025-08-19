@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/models"
 	"uno/cmd/shortener/storage"
 	"uno/cmd/shortener/utils"
@@ -13,6 +14,12 @@ import (
 
 func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := middleware.FromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read body", http.StatusBadRequest)
@@ -31,7 +38,7 @@ func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 		}
 
 		shortID := utils.GenerateShortID()
-		store.Save(shortID, originalURL)
+		store.Save(shortID, originalURL, userID)
 
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprint(w, cfg.BaseURL+"/"+shortID)
@@ -40,6 +47,12 @@ func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 
 func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := middleware.FromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		data, _ := io.ReadAll(r.Body)
 		var req models.APIRequest
 		if err := req.UnmarshalJSON(data); err != nil {
@@ -67,7 +80,7 @@ func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 		}
 
 		shortID := utils.GenerateShortID()
-		store.Save(shortID, originalURL)
+		store.Save(shortID, originalURL, userID)
 
 		resp := models.APIResponse{
 			Result: cfg.BaseURL + "/" + shortID,
@@ -86,6 +99,12 @@ func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 
 func BatchShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := middleware.FromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read body", http.StatusBadRequest)
@@ -116,7 +135,7 @@ func BatchShortenHandler(cfg *config.Config, store storage.Storage) http.Handler
 			})
 		}
 
-		if err := store.SaveBatch(pairs); err != nil {
+		if err := store.SaveBatch(pairs, userID); err != nil {
 			http.Error(w, "failed to save batch", http.StatusInternalServerError)
 			return
 		}

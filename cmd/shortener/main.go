@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"net/http"
 	"uno/cmd/shortener/config"
-	"uno/cmd/shortener/db"
 	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
@@ -18,14 +17,14 @@ import (
 func main() {
 	cfg := config.NewConfig()
 
-	var conn *pgx.Conn
+	var pool *pgxpool.Pool
 	if cfg.DatabaseDSN != "" {
 		var err error
-		conn, err = db.NewPG(cfg.DatabaseDSN)
+		pool, err = pgxpool.New(context.Background(), cfg.DatabaseDSN)
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
-		defer conn.Close(context.Background())
+		defer pool.Close()
 	}
 
 	logger, err := zap.NewProduction()
@@ -34,22 +33,31 @@ func main() {
 	}
 	defer logger.Sync()
 
+	deleteQueue := make(chan handlers.DeleteRequest, 100)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.WithUserID)
 	r.Use(middleware.LoggingMiddleware(logger))
 
 	var store storage.Storage
-	if conn != nil {
-		store, err = storage.NewPostgresStorage(conn)
+	if pool != nil {
+		store, err = storage.NewPostgresStorage(pool)
 		if err != nil {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
+		}
+		if _, ok := store.(*storage.PostgresStorage); ok {
+			go handlers.RunDeletionWorker(context.Background(), store, logger, deleteQueue)
 		}
 	} else {
 		if cfg.FileStoragePath != "" {
 			s, err := storage.NewFileStorage(cfg.FileStoragePath)
 			if err == nil {
 				store = s
+				if _, ok := store.(*storage.FileStorage); ok {
+					go handlers.RunDeletionWorker(context.Background(), store, logger, deleteQueue)
+				}
 			}
 		}
 		if store == nil {
@@ -61,7 +69,9 @@ func main() {
 	r.Post("/api/shorten", handlers.APIShortenHandler(cfg, store))
 	r.Post("/api/shorten/batch", handlers.BatchShortenHandler(cfg, store))
 	r.Get("/{id}", handlers.RedirectHandler(store))
-	r.Get("/ping", handlers.PingHandler(conn))
+	r.Get("/ping", handlers.PingHandler(pool))
+	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
+	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger, deleteQueue))
 
 	srv := &http.Server{
 		Addr:    cfg.Address,
