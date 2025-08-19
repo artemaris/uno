@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"net/http"
 	"uno/cmd/shortener/config"
 	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	_ "net/http/pprof"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -32,6 +35,13 @@ func main() {
 		log.Fatalf("Could not initialize zap logger: %v", err)
 	}
 	defer logger.Sync()
+
+	// Start pprof server on :6060
+	go func() {
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Printf("pprof server error: %v", err)
+		}
+	}()
 
 	deleteQueue := make(chan handlers.DeleteRequest, 100)
 
