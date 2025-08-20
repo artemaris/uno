@@ -75,7 +75,7 @@ func (s *PostgresStorage) FindByOriginal(originalURL string) (string, bool) {
 func (s *PostgresStorage) SaveBatch(pairs map[string]string, userID string) error {
 	batch := &pgx.Batch{}
 	for shortID, originalURL := range pairs {
-		batch.Queue(`INSERT INTO public.short_urls (id, original_url, userID) VALUES ($1, $2, $3)
+		batch.Queue(`INSERT INTO public.short_urls (id, original_url, user_id) VALUES ($1, $2, $3)
                      ON CONFLICT (id) DO NOTHING`, shortID, originalURL, userID)
 	}
 
