@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"uno/cmd/shortener/models"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"

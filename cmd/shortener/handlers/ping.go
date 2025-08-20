@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func PingHandler(pool *pgxpool.Pool) http.HandlerFunc {

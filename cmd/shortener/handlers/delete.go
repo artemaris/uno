@@ -3,11 +3,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"uno/cmd/shortener/middleware"
 	"uno/cmd/shortener/storage"
+
+	"go.uber.org/zap"
 )
 
 type DeleteRequest struct {
