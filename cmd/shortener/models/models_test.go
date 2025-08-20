@@ -98,6 +98,15 @@ func TestUserURL_Deleted(t *testing.T) {
 	if !userURL.Deleted {
 		t.Error("UserURL should be marked as deleted")
 	}
+
+	// Also verify other fields to use them
+	if userURL.ShortURL != "abc123" {
+		t.Errorf("Expected ShortURL abc123, got %s", userURL.ShortURL)
+	}
+
+	if userURL.OriginalURL != "https://example.com" {
+		t.Errorf("Expected OriginalURL https://example.com, got %s", userURL.OriginalURL)
+	}
 }
 
 func TestBatchRequest_UnmarshalJSON(t *testing.T) {
