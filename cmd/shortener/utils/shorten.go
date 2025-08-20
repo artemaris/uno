@@ -2,13 +2,20 @@ package utils
 
 import (
 	"crypto/rand"
-	"encoding/base64"
+	"math/big"
 )
 
 const idLength = 8
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func GenerateShortID() string {
-	bytes := make([]byte, idLength)
-	rand.Read(bytes)
-	return base64.URLEncoding.EncodeToString(bytes)[:idLength]
+	id := make([]byte, idLength)
+	charsetLen := big.NewInt(int64(len(charset)))
+
+	for i := range id {
+		randomIndex, _ := rand.Int(rand.Reader, charsetLen)
+		id[i] = charset[randomIndex.Int64()]
+	}
+
+	return string(id)
 }
