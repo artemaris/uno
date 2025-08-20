@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	"github.com/go-chi/chi/v5"
 	"net/http"
 	"uno/cmd/shortener/storage"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func RedirectHandler(store storage.Storage) http.HandlerFunc {
