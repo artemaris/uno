@@ -8,6 +8,9 @@ import (
 const idLength = 8
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+// GenerateShortID генерирует случайный сокращенный идентификатор длиной 8 символов
+// Использует криптографически стойкий генератор случайных чисел для создания
+// уникальных идентификаторов из набора букв и цифр
 func GenerateShortID() string {
 	id := make([]byte, idLength)
 	charsetLen := big.NewInt(int64(len(charset)))

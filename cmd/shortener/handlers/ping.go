@@ -8,6 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// PingHandler обрабатывает GET запросы для проверки доступности базы данных
+// Если база данных недоступна, возвращает статус 503 Service Unavailable
+// Если база данных доступна или не настроена, возвращает статус 200 OK
 func PingHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if pool == nil {
