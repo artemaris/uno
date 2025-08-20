@@ -13,24 +13,30 @@ import (
 	"github.com/google/uuid"
 )
 
+// FileStorage реализует интерфейс Storage с хранением данных в файле
+// Поддерживает персистентность данных и асинхронные операции
 type FileStorage struct {
-	filePath        string
-	mu              sync.RWMutex
-	originalToShort map[string]string
-	shortToOriginal map[string]string
-	file            *os.File
-	userURLs        map[string][]models.UserURL
-	deleted         map[string]bool
+	filePath        string                      // Путь к файлу хранилища
+	mu              sync.RWMutex                // Мьютекс для безопасного доступа к данным
+	originalToShort map[string]string           // Оригинальный URL -> сокращенный ID
+	shortToOriginal map[string]string           // Сокращенный ID -> оригинальный URL
+	file            *os.File                    // Файл для записи данных
+	userURLs        map[string][]models.UserURL // Пользователь -> список его URL
+	deleted         map[string]bool             // Сокращенный ID -> флаг удаления
 }
 
+// record представляет запись в файле хранилища
 type record struct {
-	UUID        string `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-	UserID      string `json:"user_id"`
-	DeletedFlag bool   `json:"deleted_flag"`
+	UUID        string `json:"uuid"`         // Уникальный идентификатор записи
+	ShortURL    string `json:"short_url"`    // Сокращенный URL
+	OriginalURL string `json:"original_url"` // Оригинальный URL
+	UserID      string `json:"user_id"`      // Идентификатор пользователя
+	DeletedFlag bool   `json:"deleted_flag"` // Флаг удаления
 }
 
+// NewFileStorage создает новый экземпляр FileStorage
+// Создает директорию для файла, если она не существует
+// Загружает существующие данные из файла при инициализации
 func NewFileStorage(path string) (Storage, error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -58,6 +64,8 @@ func NewFileStorage(path string) (Storage, error) {
 	return fs, nil
 }
 
+// load загружает данные из файла в память
+// Читает файл построчно и восстанавливает состояние хранилища
 func (fs *FileStorage) load() error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -97,6 +105,9 @@ func (fs *FileStorage) load() error {
 	return scanner.Err()
 }
 
+// Save сохраняет связь между сокращенным ID и оригинальным URL для конкретного пользователя
+// Записывает данные в файл для персистентности
+// Если URL уже существует, операция игнорируется
 func (fs *FileStorage) Save(shortID, originalURL, userID string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -128,6 +139,7 @@ func (fs *FileStorage) Save(shortID, originalURL, userID string) {
 	}
 }
 
+// Get возвращает оригинальный URL по сокращенному ID, флаг удаления и существования
 func (fs *FileStorage) Get(shortID string) (string, bool, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
@@ -141,6 +153,7 @@ func (fs *FileStorage) Get(shortID string) (string, bool, bool) {
 	return originalURL, deleted, true
 }
 
+// FindByOriginal ищет существующий сокращенный ID для оригинального URL
 func (fs *FileStorage) FindByOriginal(originalURL string) (string, bool) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
@@ -148,6 +161,8 @@ func (fs *FileStorage) FindByOriginal(originalURL string) (string, bool) {
 	return id, ok
 }
 
+// SaveBatch сохраняет пакет URL для конкретного пользователя
+// Обрабатывает каждый URL аналогично методу Save
 func (fs *FileStorage) SaveBatch(pairs map[string]string, userID string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -180,6 +195,8 @@ func (fs *FileStorage) SaveBatch(pairs map[string]string, userID string) error {
 	return nil
 }
 
+// DeleteURLs помечает указанные URL как удаленные для конкретного пользователя
+// Записывает информацию об удалении в файл для персистентности
 func (fs *FileStorage) DeleteURLs(userID string, ids []string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -208,6 +225,8 @@ func (fs *FileStorage) DeleteURLs(userID string, ids []string) error {
 	return nil
 }
 
+// GetUserURLs возвращает все не удаленные URL для конкретного пользователя
+// Фильтрует удаленные URL из результата
 func (fs *FileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()

@@ -7,9 +7,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// contextKey определяет тип ключа для контекста
 type contextKey string
 
+// ContextUserIDKey ключ для хранения идентификатора пользователя в контексте
 const ContextUserIDKey contextKey = "userID"
+
+// userIDCookieName имя cookie для хранения идентификатора пользователя
 const userIDCookieName = "auth_user"
 
 // WithUserID middleware добавляет идентификатор пользователя в контекст запроса

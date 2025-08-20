@@ -13,16 +13,21 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// deleteTask представляет задачу на удаление URL для конкретного пользователя
 type deleteTask struct {
-	UserID    string
-	ShortURLs []string
+	UserID    string   // Идентификатор пользователя
+	ShortURLs []string // Список сокращенных ID для удаления
 }
 
+// PostgresStorage реализует интерфейс Storage с использованием PostgreSQL
+// Поддерживает асинхронные операции удаления через очередь задач
 type PostgresStorage struct {
-	pool        *pgxpool.Pool
-	deleteQueue chan deleteTask
+	pool        *pgxpool.Pool   // Пул соединений с базой данных
+	deleteQueue chan deleteTask // Канал для очереди задач на удаление
 }
 
+// NewPostgresStorage создает новый экземпляр PostgresStorage
+// Инициализирует схему базы данных при создании
 func NewPostgresStorage(conn *pgxpool.Pool) (Storage, error) {
 	s := &PostgresStorage{
 		pool:        conn,
@@ -34,6 +39,8 @@ func NewPostgresStorage(conn *pgxpool.Pool) (Storage, error) {
 	return s, nil
 }
 
+// Save сохраняет связь между сокращенным ID и оригинальным URL для конкретного пользователя
+// Игнорирует ошибки уникальности (URL уже существует)
 func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
 	_, err := s.pool.Exec(context.Background(),
 		`INSERT INTO public.short_urls (id, original_url, user_id) VALUES ($1, $2, $3)`,
@@ -47,6 +54,8 @@ func (s *PostgresStorage) Save(shortID, originalURL, userID string) {
 	}
 }
 
+// FindByOriginal ищет существующий сокращенный ID для оригинального URL
+// Возвращает пустую строку, если URL не найден или удален
 func (s *PostgresStorage) FindByOriginal(originalURL string) (string, bool) {
 	var id string
 	err := s.pool.QueryRow(context.Background(),
@@ -61,10 +70,12 @@ func (s *PostgresStorage) FindByOriginal(originalURL string) (string, bool) {
 	return id, true
 }
 
+// SaveBatch сохраняет пакет URL для конкретного пользователя
+// Использует batch операции для оптимизации производительности
 func (s *PostgresStorage) SaveBatch(pairs map[string]string, userID string) error {
 	batch := &pgx.Batch{}
 	for shortID, originalURL := range pairs {
-		batch.Queue(`INSERT INTO public.short_urls (id, original_url, user_id) VALUES ($1, $2, $3)
+		batch.Queue(`INSERT INTO public.short_urls (id, original_url, userID) VALUES ($1, $2, $3)
                      ON CONFLICT (id) DO NOTHING`, shortID, originalURL, userID)
 	}
 
@@ -80,6 +91,7 @@ func (s *PostgresStorage) SaveBatch(pairs map[string]string, userID string) erro
 	return nil
 }
 
+// Get возвращает оригинальный URL по сокращенному ID, флаг удаления и существования
 func (s *PostgresStorage) Get(shortID string) (string, bool, bool) {
 	var originalURL string
 	var deleted bool
@@ -98,6 +110,7 @@ func (s *PostgresStorage) Get(shortID string) (string, bool, bool) {
 	return originalURL, deleted, true
 }
 
+// GetUserURLs возвращает все не удаленные URL для конкретного пользователя
 func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	rows, err := s.pool.Query(context.Background(),
 		`SELECT id, original_url FROM public.short_urls WHERE user_id = $1 AND is_deleted = false`, userID)
@@ -120,6 +133,8 @@ func (s *PostgresStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	return result, nil
 }
 
+// DeleteURLs помечает указанные URL как удаленные для конкретного пользователя
+// Возвращает ошибку, если не было обновлено ни одной строки
 func (s *PostgresStorage) DeleteURLs(userID string, shortIDs []string) error {
 	commandTag, err := s.pool.Exec(context.Background(),
 		`UPDATE public.short_urls SET is_deleted = true WHERE user_id = $1 AND id = ANY($2)`, userID, shortIDs)
@@ -132,6 +147,8 @@ func (s *PostgresStorage) DeleteURLs(userID string, shortIDs []string) error {
 	return nil
 }
 
+// RunDeletionWorker запускает воркер для асинхронной обработки задач на удаление URL
+// Обрабатывает задачи из очереди deleteQueue до завершения контекста
 func (s *PostgresStorage) RunDeletionWorker(ctx context.Context) {
 	for {
 		select {
@@ -149,6 +166,8 @@ func (s *PostgresStorage) RunDeletionWorker(ctx context.Context) {
 	}
 }
 
+// initSchema инициализирует схему базы данных
+// Создает таблицу short_urls, если она не существует
 func (s *PostgresStorage) initSchema() error {
 	_, err := s.pool.Exec(context.Background(), `
         CREATE TABLE IF NOT EXISTS public.short_urls (
