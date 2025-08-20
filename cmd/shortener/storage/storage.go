@@ -10,29 +10,29 @@ import (
 type Storage interface {
 	// Save сохраняет связь между сокращенным ID и оригинальным URL для конкретного пользователя
 	Save(shortID, originalURL, userID string)
-	
+
 	// Get возвращает оригинальный URL по сокращенному ID, флаг удаления и существования
 	Get(shortID string) (originalURL string, deleted bool, exists bool)
-	
+
 	// FindByOriginal ищет существующий сокращенный ID для оригинального URL
 	FindByOriginal(originalURL string) (string, bool)
-	
+
 	// SaveBatch сохраняет пакет URL для конкретного пользователя
 	SaveBatch(pairs map[string]string, userID string) error
-	
+
 	// GetUserURLs возвращает все URL для конкретного пользователя
 	GetUserURLs(userID string) ([]models.UserURL, error)
-	
+
 	// DeleteURLs помечает указанные URL как удаленные для конкретного пользователя
 	DeleteURLs(userID string, ids []string) error
 }
 
 // InMemoryStorage реализует интерфейс Storage с хранением данных в памяти
 type InMemoryStorage struct {
-	data    map[string]string        // Сокращенный ID -> оригинальный URL
+	data    map[string]string           // Сокращенный ID -> оригинальный URL
 	users   map[string][]models.UserURL // Пользователь -> список его URL
-	deleted map[string]bool          // Сокращенный ID -> флаг удаления
-	mu      sync.RWMutex             // Мьютекс для безопасного доступа к данным
+	deleted map[string]bool             // Сокращенный ID -> флаг удаления
+	mu      sync.RWMutex                // Мьютекс для безопасного доступа к данным
 }
 
 // NewInMemoryStorage создает новый экземпляр InMemoryStorage

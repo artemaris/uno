@@ -171,6 +171,35 @@ go tool cover -html=coverage.out
 go test -run Example ./cmd/shortener/handlers
 ```
 
+## Форматирование кода
+
+Проект использует стандартные инструменты Go для форматирования кода:
+
+### Автоматическое форматирование
+```bash
+./format.sh
+```
+
+### Ручное форматирование
+```bash
+# Форматирование с помощью gofmt
+gofmt -w -s .
+
+# Форматирование импортов с помощью goimports
+go install golang.org/x/tools/cmd/goimports@latest
+export PATH=$PATH:$(go env GOPATH)/bin
+goimports -w .
+```
+
+### Проверка форматирования
+```bash
+# Проверка gofmt
+gofmt -l -s .
+
+# Проверка goimports
+goimports -l .
+```
+
 ## Покрытие тестами
 
 Текущее покрытие тестами: **45.5%**
