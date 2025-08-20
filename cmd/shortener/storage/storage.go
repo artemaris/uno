@@ -6,22 +6,36 @@ import (
 	"uno/cmd/shortener/models"
 )
 
+// Storage определяет интерфейс для хранения и управления сокращенными URL
 type Storage interface {
+	// Save сохраняет связь между сокращенным ID и оригинальным URL для конкретного пользователя
 	Save(shortID, originalURL, userID string)
+
+	// Get возвращает оригинальный URL по сокращенному ID, флаг удаления и существования
 	Get(shortID string) (originalURL string, deleted bool, exists bool)
+
+	// FindByOriginal ищет существующий сокращенный ID для оригинального URL
 	FindByOriginal(originalURL string) (string, bool)
+
+	// SaveBatch сохраняет пакет URL для конкретного пользователя
 	SaveBatch(pairs map[string]string, userID string) error
+
+	// GetUserURLs возвращает все URL для конкретного пользователя
 	GetUserURLs(userID string) ([]models.UserURL, error)
+
+	// DeleteURLs помечает указанные URL как удаленные для конкретного пользователя
 	DeleteURLs(userID string, ids []string) error
 }
 
+// InMemoryStorage реализует интерфейс Storage с хранением данных в памяти
 type InMemoryStorage struct {
-	data    map[string]string
-	users   map[string][]models.UserURL
-	deleted map[string]bool
-	mu      sync.RWMutex
+	data    map[string]string           // Сокращенный ID -> оригинальный URL
+	users   map[string][]models.UserURL // Пользователь -> список его URL
+	deleted map[string]bool             // Сокращенный ID -> флаг удаления
+	mu      sync.RWMutex                // Мьютекс для безопасного доступа к данным
 }
 
+// NewInMemoryStorage создает новый экземпляр InMemoryStorage
 func NewInMemoryStorage() *InMemoryStorage {
 	return &InMemoryStorage{
 		data:    make(map[string]string),
@@ -30,6 +44,7 @@ func NewInMemoryStorage() *InMemoryStorage {
 	}
 }
 
+// Save сохраняет связь между сокращенным ID и оригинальным URL для конкретного пользователя
 func (s *InMemoryStorage) Save(shortID, originalURL, userID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -41,6 +56,7 @@ func (s *InMemoryStorage) Save(shortID, originalURL, userID string) {
 	s.deleted[shortID] = false
 }
 
+// Get возвращает оригинальный URL по сокращенному ID, флаг удаления и существования
 func (s *InMemoryStorage) Get(shortID string) (string, bool, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -54,6 +70,8 @@ func (s *InMemoryStorage) Get(shortID string) (string, bool, bool) {
 	return url, deleted, true
 }
 
+// FindByOriginal ищет существующий сокращенный ID для оригинального URL
+// Игнорирует удаленные URL при поиске
 func (s *InMemoryStorage) FindByOriginal(originalURL string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -68,6 +86,8 @@ func (s *InMemoryStorage) FindByOriginal(originalURL string) (string, bool) {
 	return "", false
 }
 
+// SaveBatch сохраняет пакет URL для конкретного пользователя
+// Обрабатывает каждый URL аналогично методу Save
 func (s *InMemoryStorage) SaveBatch(pairs map[string]string, userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,6 +102,8 @@ func (s *InMemoryStorage) SaveBatch(pairs map[string]string, userID string) erro
 	return nil
 }
 
+// GetUserURLs возвращает все URL для конкретного пользователя
+// Возвращает ошибку, если пользователь не найден
 func (s *InMemoryStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -92,6 +114,8 @@ func (s *InMemoryStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	return urls, nil
 }
 
+// DeleteURLs помечает указанные URL как удаленные для конкретного пользователя
+// Обновляет флаги удаления в структуре пользователя и общей карте удаленных URL
 func (s *InMemoryStorage) DeleteURLs(userID string, ids []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

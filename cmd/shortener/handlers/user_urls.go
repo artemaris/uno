@@ -9,6 +9,10 @@ import (
 	"uno/cmd/shortener/storage"
 )
 
+// UserURLsHandler обрабатывает GET запросы для получения всех URL пользователя
+// Возвращает JSON массив с информацией о сокращенных URL пользователя
+// Если у пользователя нет URL, возвращает статус 204 No Content
+// Удаленные URL исключаются из результата
 func UserURLsHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
