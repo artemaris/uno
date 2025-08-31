@@ -7,7 +7,7 @@ import (
 
 func main() {
 	fmt.Println("Hello, World!")
-	
+
 	// Это должно вызвать ошибку анализатора
 	os.Exit(1) // want "прямой вызов os.Exit в функции main запрещен"
 }
