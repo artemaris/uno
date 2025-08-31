@@ -144,3 +144,96 @@ func TestBatchResponse_UnmarshalJSON(t *testing.T) {
 		t.Errorf("Expected ShortURL http://localhost:8080/abc123, got %s", resp.ShortURL)
 	}
 }
+
+func TestAPIRequest_MarshalJSON(t *testing.T) {
+	req := APIRequest{
+		URL: "https://example.com",
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Errorf("Failed to marshal APIRequest: %v", err)
+	}
+
+	var unmarshaled APIRequest
+	err = json.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Errorf("Failed to unmarshal APIRequest: %v", err)
+	}
+
+	if unmarshaled.URL != req.URL {
+		t.Errorf("Expected URL %s, got %s", req.URL, unmarshaled.URL)
+	}
+}
+
+func TestAPIResponse_MarshalJSON(t *testing.T) {
+	resp := APIResponse{
+		Result: "http://localhost:8080/abc123",
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Errorf("Failed to marshal APIResponse: %v", err)
+	}
+
+	var unmarshaled APIResponse
+	err = json.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Errorf("Failed to unmarshal APIResponse: %v", err)
+	}
+
+	if unmarshaled.Result != resp.Result {
+		t.Errorf("Expected Result %s, got %s", resp.Result, unmarshaled.Result)
+	}
+}
+
+func TestAPIRequest_UnmarshalJSON(t *testing.T) {
+	jsonData := `{"url":"https://example.com"}`
+
+	var req APIRequest
+	err := json.Unmarshal([]byte(jsonData), &req)
+	if err != nil {
+		t.Errorf("Failed to unmarshal JSON: %v", err)
+	}
+
+	if req.URL != "https://example.com" {
+		t.Errorf("Expected URL https://example.com, got %s", req.URL)
+	}
+}
+
+func TestAPIResponse_UnmarshalJSON(t *testing.T) {
+	jsonData := `{"result":"http://localhost:8080/abc123"}`
+
+	var resp APIResponse
+	err := json.Unmarshal([]byte(jsonData), &resp)
+	if err != nil {
+		t.Errorf("Failed to unmarshal JSON: %v", err)
+	}
+
+	if resp.Result != "http://localhost:8080/abc123" {
+		t.Errorf("Expected Result http://localhost:8080/abc123, got %s", resp.Result)
+	}
+}
+
+func TestUserURL_UnmarshalJSON(t *testing.T) {
+	jsonData := `{"short_url":"abc123","original_url":"https://example.com"}`
+
+	var userURL UserURL
+	err := json.Unmarshal([]byte(jsonData), &userURL)
+	if err != nil {
+		t.Errorf("Failed to unmarshal JSON: %v", err)
+	}
+
+	if userURL.ShortURL != "abc123" {
+		t.Errorf("Expected ShortURL abc123, got %s", userURL.ShortURL)
+	}
+
+	if userURL.OriginalURL != "https://example.com" {
+		t.Errorf("Expected OriginalURL https://example.com, got %s", userURL.OriginalURL)
+	}
+
+	// By default Deleted should be false
+	if userURL.Deleted {
+		t.Errorf("Expected Deleted to be false by default, got %v", userURL.Deleted)
+	}
+}

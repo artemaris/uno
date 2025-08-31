@@ -97,3 +97,69 @@ func TestFileStorage_DeleteURLs(t *testing.T) {
 		t.Errorf("unexpected result from GetUserURLs: %+v", urls)
 	}
 }
+
+func TestFileStorage_FindByOriginal(t *testing.T) {
+	testFile := "temp/file_storage_find_test.json"
+	defer os.Remove(testFile)
+
+	store, err := NewFileStorage(testFile)
+	if err != nil {
+		t.Errorf("failed to create file storage: %v", err)
+	}
+
+	shortID := "abc123"
+	originalURL := "https://example.com"
+	userID := "test-user"
+
+	store.Save(shortID, originalURL, userID)
+
+	foundID, exists := store.FindByOriginal(originalURL)
+	if !exists {
+		t.Error("expected to find URL by original")
+	}
+	if foundID != shortID {
+		t.Errorf("expected shortID %s, got %s", shortID, foundID)
+	}
+
+	// Test with non-existent URL
+	_, exists = store.FindByOriginal("https://nonexistent.com")
+	if exists {
+		t.Error("expected not to find non-existent URL")
+	}
+}
+
+func TestFileStorage_SaveBatch(t *testing.T) {
+	testFile := "temp/file_storage_batch_test.json"
+	defer os.Remove(testFile)
+
+	store, err := NewFileStorage(testFile)
+	if err != nil {
+		t.Errorf("failed to create file storage: %v", err)
+	}
+
+	pairs := map[string]string{
+		"abc123": "https://example1.com",
+		"def456": "https://example2.com",
+		"ghi789": "https://example3.com",
+	}
+	userID := "test-user"
+
+	err = store.SaveBatch(pairs, userID)
+	if err != nil {
+		t.Errorf("failed to save batch: %v", err)
+	}
+
+	// Verify all URLs were saved
+	for shortID, originalURL := range pairs {
+		got, deleted, exists := store.Get(shortID)
+		if !exists {
+			t.Errorf("expected to find shortID %s", shortID)
+		}
+		if deleted {
+			t.Errorf("expected URL %s not to be deleted", shortID)
+		}
+		if got != originalURL {
+			t.Errorf("expected originalURL %s, got %s", originalURL, got)
+		}
+	}
+}
