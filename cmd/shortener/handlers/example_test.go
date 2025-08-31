@@ -17,19 +17,16 @@ import (
 // ExampleShortenURLHandler демонстрирует использование ShortenURLHandler
 // для сокращения URL в текстовом формате
 func ExampleShortenURLHandler() {
-	// Создаем конфигурацию и хранилище
-	cfg := &config.Config{BaseURL: "http://localhost:8080"}
-	store := storage.NewInMemoryStorage()
+	// Настраиваем тестовое окружение
+	cfg, store := setupTestEnvironment()
 
 	// Создаем тестовый запрос
-	req := httptest.NewRequest("POST", "/", strings.NewReader("https://example.com"))
+	body := bytes.NewReader([]byte("https://example.com"))
+	req := createTestRequest("POST", "/", body, "test-user-123")
 	req.Header.Set("Content-Type", "text/plain")
 
-	// Добавляем userID в контекст (в реальном приложении это делает middleware)
-	req = req.WithContext(contextWithUserID("test-user-123"))
-
 	// Создаем ResponseRecorder для записи ответа
-	w := httptest.NewRecorder()
+	w := createTestRecorder()
 
 	// Вызываем хендлер
 	handler := ShortenURLHandler(cfg, store)
@@ -49,19 +46,17 @@ func ExampleShortenURLHandler() {
 // ExampleAPIShortenHandler демонстрирует использование APIShortenHandler
 // для сокращения URL через JSON API
 func ExampleAPIShortenHandler() {
-	// Создаем конфигурацию и хранилище
-	cfg := &config.Config{BaseURL: "http://localhost:8080"}
-	store := storage.NewInMemoryStorage()
+	// Настраиваем тестовое окружение
+	cfg, store := setupTestEnvironment()
 
 	// Создаем JSON запрос
 	requestBody := models.APIRequest{URL: "https://example.com"}
 	jsonData, _ := json.Marshal(requestBody)
 
-	req := httptest.NewRequest("POST", "/api/shorten", bytes.NewReader(jsonData))
+	req := createTestRequest("POST", "/api/shorten", bytes.NewReader(jsonData), "test-user-123")
 	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(contextWithUserID("test-user-123"))
 
-	w := httptest.NewRecorder()
+	w := createTestRecorder()
 
 	// Вызываем хендлер
 	handler := APIShortenHandler(cfg, store)
@@ -85,9 +80,8 @@ func ExampleAPIShortenHandler() {
 // ExampleBatchShortenHandler демонстрирует использование BatchShortenHandler
 // для пакетного сокращения URL
 func ExampleBatchShortenHandler() {
-	// Создаем конфигурацию и хранилище
-	cfg := &config.Config{BaseURL: "http://localhost:8080"}
-	store := storage.NewInMemoryStorage()
+	// Настраиваем тестовое окружение
+	cfg, store := setupTestEnvironment()
 
 	// Создаем пакетный запрос
 	batchRequest := []models.BatchRequest{
@@ -98,11 +92,10 @@ func ExampleBatchShortenHandler() {
 
 	jsonData, _ := json.Marshal(batchRequest)
 
-	req := httptest.NewRequest("POST", "/api/shorten/batch", bytes.NewReader(jsonData))
+	req := createTestRequest("POST", "/api/shorten/batch", bytes.NewReader(jsonData), "test-user-123")
 	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(contextWithUserID("test-user-123"))
 
-	w := httptest.NewRecorder()
+	w := createTestRecorder()
 
 	// Вызываем хендлер
 	handler := BatchShortenHandler(cfg, store)
@@ -160,9 +153,9 @@ func ExampleRedirectHandler() {
 	}
 
 	// Создаем запрос с shortID в URL
-	req := httptest.NewRequest("GET", "/AbCdEfGh", nil)
+	req := createTestRequest("GET", "/AbCdEfGh", nil, "")
 
-	w := httptest.NewRecorder()
+	w := createTestRecorder()
 
 	// Вызываем тестовый хендлер
 	testHandler(w, req)
@@ -178,19 +171,17 @@ func ExampleRedirectHandler() {
 // ExampleUserURLsHandler демонстрирует использование UserURLsHandler
 // для получения всех URL пользователя
 func ExampleUserURLsHandler() {
-	// Создаем конфигурацию и хранилище
-	cfg := &config.Config{BaseURL: "http://localhost:8080"}
-	store := storage.NewInMemoryStorage()
+	// Настраиваем тестовое окружение
+	cfg, store := setupTestEnvironment()
 
 	// Добавляем тестовые URL для пользователя
 	store.Save("AbCdEfGh", "https://example1.com", "test-user-123")
 	store.Save("IjKlMnOp", "https://example2.com", "test-user-123")
 
 	// Создаем запрос
-	req := httptest.NewRequest("GET", "/api/user/urls", nil)
-	req = req.WithContext(contextWithUserID("test-user-123"))
+	req := createTestRequest("GET", "/api/user/urls", nil, "test-user-123")
 
-	w := httptest.NewRecorder()
+	w := createTestRecorder()
 
 	// Вызываем хендлер
 	handler := UserURLsHandler(cfg, store)
@@ -218,8 +209,10 @@ func ExampleUserURLsHandler() {
 // ExampleDeleteUserURLsHandler демонстрирует использование DeleteUserURLsHandler
 // для асинхронного удаления URL пользователя
 func ExampleDeleteUserURLsHandler() {
-	// Создаем хранилище и добавляем тестовые URL
-	store := storage.NewInMemoryStorage()
+	// Настраиваем тестовое окружение
+	_, store := setupTestEnvironment()
+	
+	// Добавляем тестовые URL
 	store.Save("AbCdEfGh", "https://example1.com", "test-user-123")
 	store.Save("IjKlMnOp", "https://example2.com", "test-user-123")
 
@@ -230,11 +223,10 @@ func ExampleDeleteUserURLsHandler() {
 	idsToDelete := []string{"AbCdEfGh"}
 	jsonData, _ := json.Marshal(idsToDelete)
 
-	req := httptest.NewRequest("DELETE", "/api/user/urls", bytes.NewReader(jsonData))
+	req := createTestRequest("DELETE", "/api/user/urls", bytes.NewReader(jsonData), "test-user-123")
 	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(contextWithUserID("test-user-123"))
 
-	w := httptest.NewRecorder()
+	w := createTestRecorder()
 
 	// Вызываем хендлер
 	handler := DeleteUserURLsHandler(store, nil, deleteQueue)
@@ -257,9 +249,9 @@ func ExampleDeleteUserURLsHandler() {
 // для проверки доступности базы данных
 func ExamplePingHandler() {
 	// Создаем запрос
-	req := httptest.NewRequest("GET", "/ping", nil)
+	req := createTestRequest("GET", "/ping", nil, "")
 
-	w := httptest.NewRecorder()
+	w := createTestRecorder()
 
 	// Вызываем хендлер без базы данных (nil)
 	handler := PingHandler(nil)
@@ -269,6 +261,34 @@ func ExamplePingHandler() {
 	fmt.Printf("Status without DB: %d\n", w.Code)
 	// Output:
 	// Status without DB: 200
+}
+
+// setupTestEnvironment создает базовое окружение для тестов с конфигурацией и хранилищем
+func setupTestEnvironment() (*config.Config, storage.Storage) {
+	cfg := &config.Config{BaseURL: "http://localhost:8080"}
+	store := storage.NewInMemoryStorage()
+	return cfg, store
+}
+
+// createTestRequest создает HTTP запрос с установленным контекстом пользователя
+func createTestRequest(method, path string, body *bytes.Reader, userID string) *http.Request {
+	var req *http.Request
+	if body != nil {
+		req = httptest.NewRequest(method, path, body)
+	} else {
+		req = httptest.NewRequest(method, path, nil)
+	}
+	
+	if userID != "" {
+		req = req.WithContext(contextWithUserID(userID))
+	}
+	
+	return req
+}
+
+// createTestRecorder создает новый ResponseRecorder для записи ответа
+func createTestRecorder() *httptest.ResponseRecorder {
+	return httptest.NewRecorder()
 }
 
 // Вспомогательная функция для создания контекста с userID

@@ -36,12 +36,15 @@ func main() {
 	}
 	defer logger.Sync()
 
-	// Start pprof server on :6060
-	go func() {
-		if err := http.ListenAndServe(":6060", nil); err != nil {
-			log.Printf("pprof server error: %v", err)
-		}
-	}()
+	// Start pprof server on :6060 only if enabled (development mode)
+	if cfg.EnablePprof {
+		go func() {
+			log.Println("Starting pprof server on :6060 (development mode)")
+			if err := http.ListenAndServe(":6060", nil); err != nil {
+				log.Printf("pprof server error: %v", err)
+			}
+		}()
+	}
 
 	deleteQueue := make(chan handlers.DeleteRequest, 100)
 
