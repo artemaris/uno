@@ -211,7 +211,7 @@ func ExampleUserURLsHandler() {
 func ExampleDeleteUserURLsHandler() {
 	// Настраиваем тестовое окружение
 	_, store := setupTestEnvironment()
-	
+
 	// Добавляем тестовые URL
 	store.Save("AbCdEfGh", "https://example1.com", "test-user-123")
 	store.Save("IjKlMnOp", "https://example2.com", "test-user-123")
@@ -278,11 +278,11 @@ func createTestRequest(method, path string, body *bytes.Reader, userID string) *
 	} else {
 		req = httptest.NewRequest(method, path, nil)
 	}
-	
+
 	if userID != "" {
 		req = req.WithContext(contextWithUserID(userID))
 	}
-	
+
 	return req
 }
 
