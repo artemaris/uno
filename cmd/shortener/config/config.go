@@ -11,13 +11,30 @@ const (
 	defaultStoragePath = "/tmp/short-url-db.json"
 )
 
+// Config содержит конфигурационные параметры сервиса сокращения URL
 type Config struct {
-	Address         string
-	BaseURL         string
-	FileStoragePath string
-	DatabaseDSN     string
+	Address         string // Адрес HTTP сервера (например, "localhost:8080")
+	BaseURL         string // Базовый URL для генерации сокращенных ссылок
+	FileStoragePath string // Путь к файлу для хранения данных (если используется файловое хранилище)
+	DatabaseDSN     string // Строка подключения к PostgreSQL (если используется база данных)
 }
 
+// NewConfig создает новый экземпляр конфигурации, читая параметры из:
+// 1. Переменных окружения (приоритет)
+// 2. Флагов командной строки
+// 3. Значений по умолчанию
+//
+// Поддерживаемые переменные окружения:
+// - SERVER_ADDRESS: адрес сервера
+// - BASE_URL: базовый URL
+// - FILE_STORAGE_PATH: путь к файлу хранилища
+// - DATABASE_DSN: строка подключения к PostgreSQL
+//
+// Поддерживаемые флаги командной строки:
+// - -a: адрес сервера
+// - -b: базовый URL
+// - -f: путь к файлу хранилища
+// - -d: строка подключения к PostgreSQL
 func NewConfig() *Config {
 	addressFlag := flag.String("a", defaultAddress, "http service address")
 	baseURLFlag := flag.String("b", defaultBaseURL, "http base url")

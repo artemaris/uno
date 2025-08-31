@@ -12,6 +12,8 @@ import (
 	"uno/cmd/shortener/utils"
 )
 
+// ShortenURLHandler обрабатывает POST запросы для сокращения URL в текстовом формате
+// Принимает URL в теле запроса и возвращает сокращенную ссылку
 func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
@@ -45,6 +47,8 @@ func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 	}
 }
 
+// APIShortenHandler обрабатывает POST запросы для сокращения URL через JSON API
+// Принимает JSON с полем "url" и возвращает JSON с полем "result"
 func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
@@ -97,6 +101,8 @@ func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 	}
 }
 
+// BatchShortenHandler обрабатывает POST запросы для пакетного сокращения URL
+// Принимает массив URL с correlation_id и возвращает массив сокращенных ссылок
 func BatchShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.FromContext(r.Context())
