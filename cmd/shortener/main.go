@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"uno/cmd/shortener/config"
@@ -17,7 +18,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// Глобальные переменные для информации о сборке
+// Устанавливаются при сборке через флаги компилятора
+var (
+	buildVersion string = "N/A"
+	buildDate    string = "N/A"
+	buildCommit  string = "N/A"
+)
+
 func main() {
+	// Выводим информацию о сборке
+	printBuildInfo()
+
 	cfg := config.NewConfig()
 
 	var pool *pgxpool.Pool
@@ -95,4 +107,19 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// printBuildInfo выводит информацию о сборке приложения
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\n", getBuildValue(buildVersion))
+	fmt.Printf("Build date: %s\n", getBuildValue(buildDate))
+	fmt.Printf("Build commit: %s\n", getBuildValue(buildCommit))
+}
+
+// getBuildValue возвращает значение сборки или "N/A" если значение пустое
+func getBuildValue(value string) string {
+	if value == "" {
+		return "N/A"
+	}
+	return value
 }
