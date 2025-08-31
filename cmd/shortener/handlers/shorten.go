@@ -39,7 +39,11 @@ func ShortenURLHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 			return
 		}
 
-		shortID := utils.GenerateShortID()
+		shortID, err := utils.GenerateShortID()
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 		store.Save(shortID, originalURL, userID)
 
 		w.WriteHeader(http.StatusCreated)
@@ -83,7 +87,11 @@ func APIShortenHandler(cfg *config.Config, store storage.Storage) http.HandlerFu
 			return
 		}
 
-		shortID := utils.GenerateShortID()
+		shortID, err := utils.GenerateShortID()
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 		store.Save(shortID, originalURL, userID)
 
 		resp := models.APIResponse{
@@ -132,7 +140,11 @@ func BatchShortenHandler(cfg *config.Config, store storage.Storage) http.Handler
 		responses := make([]models.BatchResponse, 0, len(requests))
 
 		for _, req := range requests {
-			shortID := utils.GenerateShortID()
+			shortID, err := utils.GenerateShortID()
+			if err != nil {
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
 			pairs[shortID] = req.OriginalURL
 
 			responses = append(responses, models.BatchResponse{

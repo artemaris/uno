@@ -17,6 +17,7 @@ type Config struct {
 	BaseURL         string // Базовый URL для генерации сокращенных ссылок
 	FileStoragePath string // Путь к файлу для хранения данных (если используется файловое хранилище)
 	DatabaseDSN     string // Строка подключения к PostgreSQL (если используется база данных)
+	EnablePprof     bool   // Включение pprof сервера (только для разработки)
 }
 
 // NewConfig создает новый экземпляр конфигурации, читая параметры из:
@@ -29,17 +30,20 @@ type Config struct {
 // - BASE_URL: базовый URL
 // - FILE_STORAGE_PATH: путь к файлу хранилища
 // - DATABASE_DSN: строка подключения к PostgreSQL
+// - ENABLE_PPROF: включение pprof сервера (true/false, только для разработки)
 //
 // Поддерживаемые флаги командной строки:
 // - -a: адрес сервера
 // - -b: базовый URL
 // - -f: путь к файлу хранилища
 // - -d: строка подключения к PostgreSQL
+// - -pprof: включение pprof сервера (только для разработки)
 func NewConfig() *Config {
 	addressFlag := flag.String("a", defaultAddress, "http service address")
 	baseURLFlag := flag.String("b", defaultBaseURL, "http base url")
 	filePathFlag := flag.String("f", defaultStoragePath, "storage path")
 	dsnFlag := flag.String("d", "", "PostgreSQL DSN")
+	pprofFlag := flag.Bool("pprof", false, "enable pprof server (development only)")
 	flag.Parse()
 
 	addr := os.Getenv("SERVER_ADDRESS")
@@ -62,10 +66,16 @@ func NewConfig() *Config {
 		dsn = *dsnFlag
 	}
 
+	enablePprof := *pprofFlag
+	if pprofEnv := os.Getenv("ENABLE_PPROF"); pprofEnv != "" {
+		enablePprof = pprofEnv == "true" || pprofEnv == "1"
+	}
+
 	return &Config{
 		Address:         addr,
 		BaseURL:         baseURL,
 		FileStoragePath: fileStorage,
 		DatabaseDSN:     dsn,
+		EnablePprof:     enablePprof,
 	}
 }
