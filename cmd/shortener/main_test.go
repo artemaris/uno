@@ -139,10 +139,10 @@ func TestPrintBuildInfo(t *testing.T) {
 func TestGlobalVariablesDefaultValues(t *testing.T) {
 	// Этот тест проверяет, что глобальные переменные имеют корректные значения по умолчанию
 	// В реальной среде они будут установлены через ldflags при сборке
-	
+
 	// Проверяем, что переменные объявлены и доступны
 	_ = buildVersion
-	_ = buildDate  
+	_ = buildDate
 	_ = buildCommit
 
 	// Если переменные не были установлены через ldflags, они должны иметь значения по умолчанию
