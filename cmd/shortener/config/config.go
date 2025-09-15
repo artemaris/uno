@@ -155,7 +155,7 @@ func loadJSONConfig(configPath string) JSONConfig {
 	if configPath == "" {
 		configPath = os.Getenv("CONFIG")
 	}
-	
+
 	// Если путь к конфигурации не указан, возвращаем пустую конфигурацию
 	if configPath == "" {
 		return JSONConfig{}
