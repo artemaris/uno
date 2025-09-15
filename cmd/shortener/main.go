@@ -104,8 +104,15 @@ func main() {
 	}
 
 	log.Println("Starting server on", cfg.Address)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
+	if cfg.EnableHTTPS {
+		log.Printf("HTTPS enabled, using certificate: %s, key: %s", cfg.CertFile, cfg.KeyFile)
+		if err := srv.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		if err := srv.ListenAndServe(); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
