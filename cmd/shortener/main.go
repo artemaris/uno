@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 	"uno/cmd/shortener/config"
 	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
@@ -32,10 +36,14 @@ func main() {
 
 	cfg := config.NewConfig()
 
+	// Создаем контекст с возможностью отмены
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var pool *pgxpool.Pool
 	if cfg.DatabaseDSN != "" {
 		var err error
-		pool, err = pgxpool.New(context.Background(), cfg.DatabaseDSN)
+		pool, err = pgxpool.New(ctx, cfg.DatabaseDSN)
 		if err != nil {
 			log.Fatalf("DB connection failed: %v", err)
 		}
@@ -73,7 +81,7 @@ func main() {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
 		if _, ok := store.(*storage.PostgresStorage); ok {
-			go handlers.RunDeletionWorker(context.Background(), store, logger, deleteQueue)
+			go handlers.RunDeletionWorker(ctx, store, logger, deleteQueue)
 		}
 	} else {
 		if cfg.FileStoragePath != "" {
@@ -81,7 +89,7 @@ func main() {
 			if err == nil {
 				store = s
 				if _, ok := store.(*storage.FileStorage); ok {
-					go handlers.RunDeletionWorker(context.Background(), store, logger, deleteQueue)
+					go handlers.RunDeletionWorker(ctx, store, logger, deleteQueue)
 				}
 			}
 		}
@@ -103,16 +111,42 @@ func main() {
 		Handler: r,
 	}
 
-	log.Println("Starting server on", cfg.Address)
-	if cfg.EnableHTTPS {
-		log.Printf("HTTPS enabled, using certificate: %s, key: %s", cfg.CertFile, cfg.KeyFile)
-		if err := srv.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile); err != nil {
-			log.Fatal(err)
+	// Запускаем сервер в отдельной горутине
+	serverErr := make(chan error, 1)
+	go func() {
+		log.Println("Starting server on", cfg.Address)
+		if cfg.EnableHTTPS {
+			log.Printf("HTTPS enabled, using certificate: %s, key: %s", cfg.CertFile, cfg.KeyFile)
+			serverErr <- srv.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile)
+		} else {
+			serverErr <- srv.ListenAndServe()
 		}
+	}()
+
+	// Настраиваем обработку сигналов для graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+
+	// Ждем сигнал завершения или ошибку сервера
+	select {
+	case sig := <-sigChan:
+		log.Printf("Received signal %v, starting graceful shutdown...", sig)
+		cancel() // Отменяем контекст для остановки горутин
+	case err := <-serverErr:
+		if err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+	}
+
+	// Graceful shutdown с таймаутом
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	log.Println("Shutting down server...")
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
 	} else {
-		if err := srv.ListenAndServe(); err != nil {
-			log.Fatal(err)
-		}
+		log.Println("Server shutdown completed successfully")
 	}
 }
 
