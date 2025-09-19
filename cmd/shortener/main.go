@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // Глобальные переменные для информации о сборке
@@ -36,9 +37,9 @@ func main() {
 
 	cfg := config.NewConfig()
 
-	// Создаем контекст с возможностью отмены
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Создаем контекст с обработкой сигналов
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	defer stop()
 
 	var pool *pgxpool.Pool
 	if cfg.DatabaseDSN != "" {
@@ -56,16 +57,6 @@ func main() {
 	}
 	defer logger.Sync()
 
-	// Start pprof server on :6060 only if enabled (development mode)
-	if cfg.EnablePprof {
-		go func() {
-			log.Println("Starting pprof server on :6060 (development mode)")
-			if err := http.ListenAndServe(":6060", nil); err != nil {
-				log.Printf("pprof server error: %v", err)
-			}
-		}()
-	}
-
 	deleteQueue := make(chan handlers.DeleteRequest, 100)
 
 	r := chi.NewRouter()
@@ -80,22 +71,25 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to initialize PostgreSQL storage: %v", err)
 		}
-		if _, ok := store.(*storage.PostgresStorage); ok {
-			go handlers.RunDeletionWorker(ctx, store, logger, deleteQueue)
-		}
-	} else {
+	}
+
+	if store == nil {
 		if cfg.FileStoragePath != "" {
 			s, err := storage.NewFileStorage(cfg.FileStoragePath)
 			if err == nil {
 				store = s
-				if _, ok := store.(*storage.FileStorage); ok {
-					go handlers.RunDeletionWorker(ctx, store, logger, deleteQueue)
-				}
 			}
 		}
 		if store == nil {
 			store = storage.NewInMemoryStorage()
 		}
+	}
+
+	// Запускаем worker для удаления URL если поддерживается
+	if _, ok := store.(*storage.PostgresStorage); ok {
+		go handlers.RunDeletionWorker(ctx, store, logger, deleteQueue)
+	} else if _, ok := store.(*storage.FileStorage); ok {
+		go handlers.RunDeletionWorker(ctx, store, logger, deleteQueue)
 	}
 
 	r.Post("/", handlers.ShortenURLHandler(cfg, store))
@@ -111,42 +105,65 @@ func main() {
 		Handler: r,
 	}
 
-	// Запускаем сервер в отдельной горутине
-	serverErr := make(chan error, 1)
-	go func() {
+	// Создаем errgroup для управления горутинами
+	g, gCtx := errgroup.WithContext(ctx)
+
+	// Запускаем pprof сервер если включен
+	if cfg.EnablePprof {
+		g.Go(func() error {
+			log.Println("Starting pprof server on :6060 (development mode)")
+			pprofSrv := &http.Server{Addr: ":6060", Handler: nil}
+			go func() {
+				<-gCtx.Done()
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				pprofSrv.Shutdown(shutdownCtx)
+			}()
+			return pprofSrv.ListenAndServe()
+		})
+	}
+
+	// Запускаем основной сервер
+	g.Go(func() error {
 		log.Println("Starting server on", cfg.Address)
 		if cfg.EnableHTTPS {
 			log.Printf("HTTPS enabled, using certificate: %s, key: %s", cfg.CertFile, cfg.KeyFile)
-			serverErr <- srv.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile)
+			err := srv.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile)
+			// Игнорируем ошибку если сервер был остановлен через Shutdown
+			if err == http.ErrServerClosed {
+				return nil
+			}
+			return err
 		} else {
-			serverErr <- srv.ListenAndServe()
+			err := srv.ListenAndServe()
+			// Игнорируем ошибку если сервер был остановлен через Shutdown
+			if err == http.ErrServerClosed {
+				return nil
+			}
+			return err
 		}
-	}()
+	})
 
-	// Настраиваем обработку сигналов для graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	// Обработка graceful shutdown
+	g.Go(func() error {
+		<-gCtx.Done()
+		log.Println("Received shutdown signal, starting graceful shutdown...")
 
-	// Ждем сигнал завершения или ошибку сервера
-	select {
-	case sig := <-sigChan:
-		log.Printf("Received signal %v, starting graceful shutdown...", sig)
-		cancel() // Отменяем контекст для остановки горутин
-	case err := <-serverErr:
-		if err != nil {
-			log.Fatalf("Server error: %v", err)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Server shutdown error: %v", err)
+			return err
 		}
-	}
-
-	// Graceful shutdown с таймаутом
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
-	log.Println("Shutting down server...")
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
-	} else {
 		log.Println("Server shutdown completed successfully")
+		return nil
+	})
+
+	// Ждем завершения всех горутин
+	if err := g.Wait(); err != nil {
+		log.Printf("Application error: %v", err)
+		os.Exit(1)
 	}
 }
 

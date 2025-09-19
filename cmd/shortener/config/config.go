@@ -77,45 +77,45 @@ func NewConfig() *Config {
 	// Загружаем JSON конфигурацию (если указана)
 	jsonConfig := loadJSONConfig(*configFlag)
 
-	addr := os.Getenv("SERVER_ADDRESS")
-	if addr == "" {
-		addr = *addressFlag
+	addr := *addressFlag
+	if addrEnv, ok := os.LookupEnv("SERVER_ADDRESS"); ok {
+		addr = addrEnv
 	}
 	if addr == defaultAddress && jsonConfig.ServerAddress != "" {
 		addr = jsonConfig.ServerAddress
 	}
 
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		baseURL = *baseURLFlag
+	baseURL := *baseURLFlag
+	if baseURLEnv, ok := os.LookupEnv("BASE_URL"); ok {
+		baseURL = baseURLEnv
 	}
 	if baseURL == defaultBaseURL && jsonConfig.BaseURL != "" {
 		baseURL = jsonConfig.BaseURL
 	}
 
-	fileStorage := os.Getenv("FILE_STORAGE_PATH")
-	if fileStorage == "" {
-		fileStorage = *filePathFlag
+	fileStorage := *filePathFlag
+	if fileStorageEnv, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
+		fileStorage = fileStorageEnv
 	}
 	if fileStorage == defaultStoragePath && jsonConfig.FileStoragePath != "" {
 		fileStorage = jsonConfig.FileStoragePath
 	}
 
-	dsn := os.Getenv("DATABASE_DSN")
-	if dsn == "" {
-		dsn = *dsnFlag
+	dsn := *dsnFlag
+	if dsnEnv, ok := os.LookupEnv("DATABASE_DSN"); ok {
+		dsn = dsnEnv
 	}
 	if dsn == "" && jsonConfig.DatabaseDSN != "" {
 		dsn = jsonConfig.DatabaseDSN
 	}
 
 	enablePprof := *pprofFlag
-	if pprofEnv := os.Getenv("ENABLE_PPROF"); pprofEnv != "" {
+	if pprofEnv, ok := os.LookupEnv("ENABLE_PPROF"); ok {
 		enablePprof = pprofEnv == "true" || pprofEnv == "1"
 	}
 
 	enableHTTPS := *httpsFlag
-	if httpsEnv := os.Getenv("ENABLE_HTTPS"); httpsEnv != "" {
+	if httpsEnv, ok := os.LookupEnv("ENABLE_HTTPS"); ok {
 		enableHTTPS = httpsEnv == "true" || httpsEnv == "1"
 	}
 	if !enableHTTPS && jsonConfig.EnableHTTPS {
@@ -123,12 +123,12 @@ func NewConfig() *Config {
 	}
 
 	certFile := *certFlag
-	if certEnv := os.Getenv("CERT_FILE"); certEnv != "" {
+	if certEnv, ok := os.LookupEnv("CERT_FILE"); ok {
 		certFile = certEnv
 	}
 
 	keyFile := *keyFlag
-	if keyEnv := os.Getenv("KEY_FILE"); keyEnv != "" {
+	if keyEnv, ok := os.LookupEnv("KEY_FILE"); ok {
 		keyFile = keyEnv
 	}
 
@@ -153,7 +153,9 @@ func NewConfig() *Config {
 func loadJSONConfig(configPath string) JSONConfig {
 	// Если путь к конфигурации не указан через флаг, проверяем переменную окружения
 	if configPath == "" {
-		configPath = os.Getenv("CONFIG")
+		if configEnv, ok := os.LookupEnv("CONFIG"); ok {
+			configPath = configEnv
+		}
 	}
 
 	// Если путь к конфигурации не указан, возвращаем пустую конфигурацию
