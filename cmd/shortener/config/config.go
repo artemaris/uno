@@ -12,6 +12,7 @@ const (
 	defaultStoragePath = "/tmp/short-url-db.json"
 	defaultCertFile    = "cert.pem"
 	defaultKeyFile     = "key.pem"
+	defaultGRPCAddress = "localhost:9090"
 )
 
 // Config содержит конфигурационные параметры сервиса сокращения URL
@@ -25,6 +26,8 @@ type Config struct {
 	CertFile        string // Путь к файлу сертификата
 	KeyFile         string // Путь к файлу приватного ключа
 	TrustedSubnet   string // Доверенная подсеть для доступа к внутренним эндпоинтам
+	GRPCAddress     string // Адрес gRPC сервера (например, "localhost:9090")
+	EnableGRPC      bool   // Включение gRPC сервера
 }
 
 // JSONConfig представляет структуру JSON конфигурации
@@ -35,6 +38,8 @@ type JSONConfig struct {
 	DatabaseDSN     string `json:"database_dsn"`
 	EnableHTTPS     bool   `json:"enable_https"`
 	TrustedSubnet   string `json:"trusted_subnet"`
+	GRPCAddress     string `json:"grpc_address"`
+	EnableGRPC      bool   `json:"enable_grpc"`
 }
 
 // NewConfig создает новый экземпляр конфигурации, читая параметры из:
@@ -44,7 +49,7 @@ type JSONConfig struct {
 // 4. Значений по умолчанию (наименьший приоритет)
 //
 // Поддерживаемые переменные окружения:
-// - SERVER_ADDRESS: адрес сервера
+// - SERVER_ADDRESS: адрес HTTP сервера
 // - BASE_URL: базовый URL
 // - FILE_STORAGE_PATH: путь к файлу хранилища
 // - DATABASE_DSN: строка подключения к PostgreSQL
@@ -53,10 +58,12 @@ type JSONConfig struct {
 // - CERT_FILE: путь к файлу сертификата (по умолчанию "cert.pem")
 // - KEY_FILE: путь к файлу приватного ключа (по умолчанию "key.pem")
 // - TRUSTED_SUBNET: доверенная подсеть для доступа к внутренним эндпоинтам
+// - GRPC_ADDRESS: адрес gRPC сервера
+// - ENABLE_GRPC: включение gRPC сервера (true/false)
 // - CONFIG: путь к JSON файлу конфигурации
 //
 // Поддерживаемые флаги командной строки:
-// - -a: адрес сервера
+// - -a: адрес HTTP сервера
 // - -b: базовый URL
 // - -f: путь к файлу хранилища
 // - -d: строка подключения к PostgreSQL
@@ -65,6 +72,8 @@ type JSONConfig struct {
 // - -cert: путь к файлу сертификата
 // - -key: путь к файлу приватного ключа
 // - -t: доверенная подсеть для доступа к внутренним эндпоинтам
+// - -grpc-addr: адрес gRPC сервера
+// - -grpc: включение gRPC сервера
 // - -c/-config: путь к JSON файлу конфигурации
 func NewConfig() *Config {
 	addressFlag := flag.String("a", defaultAddress, "http service address")
@@ -76,6 +85,8 @@ func NewConfig() *Config {
 	certFlag := flag.String("cert", defaultCertFile, "path to certificate file")
 	keyFlag := flag.String("key", defaultKeyFile, "path to private key file")
 	trustedSubnetFlag := flag.String("t", "", "trusted subnet for internal endpoints")
+	grpcAddressFlag := flag.String("grpc-addr", defaultGRPCAddress, "gRPC service address")
+	grpcFlag := flag.Bool("grpc", false, "enable gRPC server")
 	configFlag := flag.String("c", "", "path to JSON config file")
 	flag.Parse()
 
@@ -145,6 +156,22 @@ func NewConfig() *Config {
 		trustedSubnet = jsonConfig.TrustedSubnet
 	}
 
+	grpcAddress := *grpcAddressFlag
+	if grpcAddressEnv, ok := os.LookupEnv("GRPC_ADDRESS"); ok {
+		grpcAddress = grpcAddressEnv
+	}
+	if grpcAddress == defaultGRPCAddress && jsonConfig.GRPCAddress != "" {
+		grpcAddress = jsonConfig.GRPCAddress
+	}
+
+	enableGRPC := *grpcFlag
+	if grpcEnv, ok := os.LookupEnv("ENABLE_GRPC"); ok {
+		enableGRPC = grpcEnv == "true" || grpcEnv == "1"
+	}
+	if !enableGRPC && jsonConfig.EnableGRPC {
+		enableGRPC = jsonConfig.EnableGRPC
+	}
+
 	// Если включен HTTPS, обновляем BaseURL для использования https://
 	if enableHTTPS && baseURL == *baseURLFlag {
 		baseURL = "https://" + addr
@@ -160,6 +187,8 @@ func NewConfig() *Config {
 		CertFile:        certFile,
 		KeyFile:         keyFile,
 		TrustedSubnet:   trustedSubnet,
+		GRPCAddress:     grpcAddress,
+		EnableGRPC:      enableGRPC,
 	}
 }
 
