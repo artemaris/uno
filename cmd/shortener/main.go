@@ -100,6 +100,12 @@ func main() {
 	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
 	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger, deleteQueue))
 
+	// Внутренний эндпоинт для статистики с проверкой доверенной подсети
+	r.Route("/api/internal", func(r chi.Router) {
+		r.Use(middleware.TrustedSubnetMiddleware(cfg.TrustedSubnet))
+		r.Get("/stats", handlers.StatsHandler(cfg, store))
+	})
+
 	srv := &http.Server{
 		Addr:    cfg.Address,
 		Handler: r,

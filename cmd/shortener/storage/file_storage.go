@@ -243,3 +243,25 @@ func (fs *FileStorage) GetUserURLs(userID string) ([]models.UserURL, error) {
 	}
 	return filtered, nil
 }
+
+// GetStats возвращает статистику сервиса
+func (fs *FileStorage) GetStats() (Stats, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	// Подсчитываем количество уникальных URL (исключая удаленные)
+	urlCount := 0
+	for _, deleted := range fs.deleted {
+		if !deleted {
+			urlCount++
+		}
+	}
+
+	// Подсчитываем количество пользователей
+	userCount := len(fs.userURLs)
+
+	return Stats{
+		URLs:  urlCount,
+		Users: userCount,
+	}, nil
+}
