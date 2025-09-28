@@ -1,0 +1,7 @@
+{
+    "server_address": "localhost:9443",
+    "base_url": "https://localhost:9443",
+    "file_storage_path": "/tmp/https-storage.json",
+    "database_dsn": "",
+    "enable_https": true
+}
