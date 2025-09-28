@@ -179,3 +179,27 @@ func (s *PostgresStorage) initSchema() error {
     `)
 	return err
 }
+
+// GetStats возвращает статистику сервиса
+func (s *PostgresStorage) GetStats() (Stats, error) {
+	var urlCount, userCount int
+
+	// Подсчитываем количество URL (исключая удаленные)
+	err := s.pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM public.short_urls WHERE is_deleted = false`).Scan(&urlCount)
+	if err != nil {
+		return Stats{}, fmt.Errorf("failed to count URLs: %w", err)
+	}
+
+	// Подсчитываем количество уникальных пользователей
+	err = s.pool.QueryRow(context.Background(),
+		`SELECT COUNT(DISTINCT user_id) FROM public.short_urls`).Scan(&userCount)
+	if err != nil {
+		return Stats{}, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	return Stats{
+		URLs:  urlCount,
+		Users: userCount,
+	}, nil
+}

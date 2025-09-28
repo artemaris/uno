@@ -24,6 +24,7 @@ type Config struct {
 	EnableHTTPS     bool   // Включение HTTPS сервера
 	CertFile        string // Путь к файлу сертификата
 	KeyFile         string // Путь к файлу приватного ключа
+	TrustedSubnet   string // Доверенная подсеть для доступа к внутренним эндпоинтам
 }
 
 // JSONConfig представляет структуру JSON конфигурации
@@ -33,6 +34,7 @@ type JSONConfig struct {
 	FileStoragePath string `json:"file_storage_path"`
 	DatabaseDSN     string `json:"database_dsn"`
 	EnableHTTPS     bool   `json:"enable_https"`
+	TrustedSubnet   string `json:"trusted_subnet"`
 }
 
 // NewConfig создает новый экземпляр конфигурации, читая параметры из:
@@ -50,6 +52,7 @@ type JSONConfig struct {
 // - ENABLE_HTTPS: включение HTTPS сервера (true/false)
 // - CERT_FILE: путь к файлу сертификата (по умолчанию "cert.pem")
 // - KEY_FILE: путь к файлу приватного ключа (по умолчанию "key.pem")
+// - TRUSTED_SUBNET: доверенная подсеть для доступа к внутренним эндпоинтам
 // - CONFIG: путь к JSON файлу конфигурации
 //
 // Поддерживаемые флаги командной строки:
@@ -61,6 +64,7 @@ type JSONConfig struct {
 // - -s: включение HTTPS сервера
 // - -cert: путь к файлу сертификата
 // - -key: путь к файлу приватного ключа
+// - -t: доверенная подсеть для доступа к внутренним эндпоинтам
 // - -c/-config: путь к JSON файлу конфигурации
 func NewConfig() *Config {
 	addressFlag := flag.String("a", defaultAddress, "http service address")
@@ -71,6 +75,7 @@ func NewConfig() *Config {
 	httpsFlag := flag.Bool("s", false, "enable HTTPS server")
 	certFlag := flag.String("cert", defaultCertFile, "path to certificate file")
 	keyFlag := flag.String("key", defaultKeyFile, "path to private key file")
+	trustedSubnetFlag := flag.String("t", "", "trusted subnet for internal endpoints")
 	configFlag := flag.String("c", "", "path to JSON config file")
 	flag.Parse()
 
@@ -132,6 +137,14 @@ func NewConfig() *Config {
 		keyFile = keyEnv
 	}
 
+	trustedSubnet := *trustedSubnetFlag
+	if trustedSubnetEnv, ok := os.LookupEnv("TRUSTED_SUBNET"); ok {
+		trustedSubnet = trustedSubnetEnv
+	}
+	if trustedSubnet == "" && jsonConfig.TrustedSubnet != "" {
+		trustedSubnet = jsonConfig.TrustedSubnet
+	}
+
 	// Если включен HTTPS, обновляем BaseURL для использования https://
 	if enableHTTPS && baseURL == *baseURLFlag {
 		baseURL = "https://" + addr
@@ -146,6 +159,7 @@ func NewConfig() *Config {
 		EnableHTTPS:     enableHTTPS,
 		CertFile:        certFile,
 		KeyFile:         keyFile,
+		TrustedSubnet:   trustedSubnet,
 	}
 }
 

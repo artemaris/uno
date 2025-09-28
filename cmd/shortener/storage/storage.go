@@ -6,6 +6,12 @@ import (
 	"uno/cmd/shortener/models"
 )
 
+// Stats представляет статистику сервиса
+type Stats struct {
+	URLs  int // количество сокращённых URL в сервисе
+	Users int // количество пользователей в сервисе
+}
+
 // Storage определяет интерфейс для хранения и управления сокращенными URL
 type Storage interface {
 	// Save сохраняет связь между сокращенным ID и оригинальным URL для конкретного пользователя
@@ -25,6 +31,9 @@ type Storage interface {
 
 	// DeleteURLs помечает указанные URL как удаленные для конкретного пользователя
 	DeleteURLs(userID string, ids []string) error
+
+	// GetStats возвращает статистику сервиса
+	GetStats() (Stats, error)
 }
 
 // InMemoryStorage реализует интерфейс Storage с хранением данных в памяти
@@ -130,4 +139,26 @@ func (s *InMemoryStorage) DeleteURLs(userID string, ids []string) error {
 		}
 	}
 	return nil
+}
+
+// GetStats возвращает статистику сервиса
+func (s *InMemoryStorage) GetStats() (Stats, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Подсчитываем количество уникальных URL (исключая удаленные)
+	urlCount := 0
+	for _, deleted := range s.deleted {
+		if !deleted {
+			urlCount++
+		}
+	}
+
+	// Подсчитываем количество пользователей
+	userCount := len(s.users)
+
+	return Stats{
+		URLs:  urlCount,
+		Users: userCount,
+	}, nil
 }

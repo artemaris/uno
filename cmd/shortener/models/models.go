@@ -67,3 +67,11 @@ type UserURL struct {
 	OriginalURL string `json:"original_url"` // Оригинальный URL
 	Deleted     bool   `json:"deleted"`      // Флаг удаления URL
 }
+
+// StatsResponse представляет ответ со статистикой сервиса
+//
+//easyjson:json
+type StatsResponse struct {
+	URLs  int `json:"urls"`  // количество сокращённых URL в сервисе
+	Users int `json:"users"` // количество пользователей в сервисе
+}
