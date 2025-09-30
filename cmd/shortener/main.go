@@ -4,14 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+	"uno/api/proto"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/grpc"
 	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
+	"uno/cmd/shortener/service"
 	"uno/cmd/shortener/storage"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +25,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	grpcServer "google.golang.org/grpc"
 )
 
 // Глобальные переменные для информации о сборке
@@ -85,6 +90,9 @@ func main() {
 		}
 	}
 
+	// Создаем сервис
+	svc := service.NewService(cfg, store, logger)
+
 	// Запускаем worker для удаления URL если поддерживается
 	if _, ok := store.(*storage.PostgresStorage); ok {
 		go handlers.RunDeletionWorker(ctx, store, logger, deleteQueue)
@@ -100,10 +108,18 @@ func main() {
 	r.Get("/api/user/urls", handlers.UserURLsHandler(cfg, store))
 	r.Delete("/api/user/urls", handlers.DeleteUserURLsHandler(store, logger, deleteQueue))
 
+	// Внутренний эндпоинт для статистики с проверкой доверенной подсети
+	r.Route("/api/internal", func(r chi.Router) {
+		r.Use(middleware.TrustedSubnetMiddleware(cfg.TrustedSubnet))
+		r.Get("/stats", handlers.StatsHandler(cfg, store))
+	})
+
 	srv := &http.Server{
 		Addr:    cfg.Address,
 		Handler: r,
 	}
+
+	var grpcSrv *grpcServer.Server
 
 	// Создаем errgroup для управления горутинами
 	g, gCtx := errgroup.WithContext(ctx)
@@ -123,9 +139,9 @@ func main() {
 		})
 	}
 
-	// Запускаем основной сервер
+	// Запускаем HTTP сервер
 	g.Go(func() error {
-		log.Println("Starting server on", cfg.Address)
+		log.Println("Starting HTTP server on", cfg.Address)
 		if cfg.EnableHTTPS {
 			log.Printf("HTTPS enabled, using certificate: %s, key: %s", cfg.CertFile, cfg.KeyFile)
 			err := srv.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile)
@@ -144,6 +160,32 @@ func main() {
 		}
 	})
 
+	// Запускаем gRPC сервер если включен
+	if cfg.EnableGRPC {
+		g.Go(func() error {
+			log.Println("Starting gRPC server on", cfg.GRPCAddress)
+
+			lis, err := net.Listen("tcp", cfg.GRPCAddress)
+			if err != nil {
+				return fmt.Errorf("failed to listen on %s: %v", cfg.GRPCAddress, err)
+			}
+
+			grpcSrv = grpcServer.NewServer(
+				grpcServer.UnaryInterceptor(grpc.WithUserIDMiddleware()),
+			)
+
+			// Создаем gRPC сервис
+			grpcService := grpc.NewServer(svc, logger)
+			proto.RegisterShortenerServiceServer(grpcSrv, grpcService)
+
+			// Запускаем gRPC сервер
+			if err := grpcSrv.Serve(lis); err != nil {
+				return fmt.Errorf("gRPC server failed: %v", err)
+			}
+			return nil
+		})
+	}
+
 	// Обработка graceful shutdown
 	g.Go(func() error {
 		<-gCtx.Done()
@@ -152,11 +194,20 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
+		// Останавливаем HTTP сервер
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Printf("Server shutdown error: %v", err)
+			log.Printf("HTTP server shutdown error: %v", err)
 			return err
 		}
-		log.Println("Server shutdown completed successfully")
+		log.Println("HTTP server shutdown completed successfully")
+
+		// Останавливаем gRPC сервер если он запущен
+		if grpcSrv != nil {
+			log.Println("Stopping gRPC server...")
+			grpcSrv.GracefulStop()
+			log.Println("gRPC server shutdown completed successfully")
+		}
+
 		return nil
 	})
 

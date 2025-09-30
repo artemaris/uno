@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package shortener;
+
+option go_package = "uno/api/proto";
+
+// Сервис для сокращения URL
+service ShortenerService {
+  // Сокращение URL
+  rpc ShortenURL(ShortenURLRequest) returns (ShortenURLResponse);
+  
+  // Получение оригинального URL по сокращенному
+  rpc GetURL(GetURLRequest) returns (GetURLResponse);
+  
+  // Пакетное сокращение URL
+  rpc BatchShortenURL(BatchShortenURLRequest) returns (BatchShortenURLResponse);
+  
+  // Получение URL пользователя
+  rpc GetUserURLs(GetUserURLsRequest) returns (GetUserURLsResponse);
+  
+  // Удаление URL пользователя
+  rpc DeleteUserURLs(DeleteUserURLsRequest) returns (DeleteUserURLsResponse);
+  
+  // Проверка доступности сервиса
+  rpc Ping(PingRequest) returns (PingResponse);
+  
+  // Получение статистики (только для внутренних запросов)
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+}
+
+// Запрос на сокращение URL
+message ShortenURLRequest {
+  string url = 1; // Оригинальный URL
+}
+
+// Ответ с сокращенным URL
+message ShortenURLResponse {
+  string result = 1; // Сокращенный URL
+}
+
+// Запрос на получение оригинального URL
+message GetURLRequest {
+  string id = 1; // Сокращенный ID
+}
+
+// Ответ с оригинальным URL
+message GetURLResponse {
+  string url = 1; // Оригинальный URL
+  bool deleted = 2; // Флаг удаления
+  bool exists = 3; // Флаг существования
+}
+
+// Запрос на пакетное сокращение URL
+message BatchShortenURLRequest {
+  repeated BatchURLItem items = 1; // Список URL для сокращения
+}
+
+// Элемент пакетного запроса
+message BatchURLItem {
+  string correlation_id = 1; // Идентификатор корреляции
+  string original_url = 2; // Оригинальный URL
+}
+
+// Ответ на пакетное сокращение URL
+message BatchShortenURLResponse {
+  repeated BatchURLResult items = 1; // Список результатов
+}
+
+// Результат пакетного запроса
+message BatchURLResult {
+  string correlation_id = 1; // Идентификатор корреляции
+  string short_url = 2; // Сокращенный URL
+}
+
+// Запрос на получение URL пользователя
+message GetUserURLsRequest {
+  // Пустой запрос, пользователь определяется из контекста
+}
+
+// Ответ с URL пользователя
+message GetUserURLsResponse {
+  repeated UserURLItem urls = 1; // Список URL пользователя
+}
+
+// URL пользователя
+message UserURLItem {
+  string short_url = 1; // Сокращенный URL
+  string original_url = 2; // Оригинальный URL
+  bool deleted = 3; // Флаг удаления
+}
+
+// Запрос на удаление URL пользователя
+message DeleteUserURLsRequest {
+  repeated string urls = 1; // Список сокращенных URL для удаления
+}
+
+// Ответ на удаление URL пользователя
+message DeleteUserURLsResponse {
+  // Пустой ответ
+}
+
+// Запрос проверки доступности
+message PingRequest {
+  // Пустой запрос
+}
+
+// Ответ проверки доступности
+message PingResponse {
+  // Пустой ответ
+}
+
+// Запрос статистики
+message GetStatsRequest {
+  // Пустой запрос
+}
+
+// Ответ со статистикой
+message GetStatsResponse {
+  int32 urls = 1; // Количество сокращенных URL
+  int32 users = 2; // Количество пользователей
+}
