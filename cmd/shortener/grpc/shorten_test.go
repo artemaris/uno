@@ -5,6 +5,7 @@ import (
 	"testing"
 	"uno/api/proto"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/service"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,7 +18,8 @@ func TestShortenURL_Success(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	// Настраиваем мок
 	store.On("FindByOriginal", "https://example.com").Return("", false)
@@ -47,7 +49,8 @@ func TestShortenURL_ExistingURL(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	// Настраиваем мок - URL уже существует
 	store.On("FindByOriginal", "https://example.com").Return("existing123", true)
@@ -72,7 +75,8 @@ func TestShortenURL_InvalidURL(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	ctx := context.WithValue(context.Background(), userIDKey, "test-user")
 
@@ -92,7 +96,8 @@ func TestShortenURL_EmptyURL(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	ctx := context.WithValue(context.Background(), userIDKey, "test-user")
 
@@ -112,7 +117,8 @@ func TestGetURL_Success(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	// Настраиваем мок
 	store.On("Get", "test123").Return("https://example.com", false, true)
@@ -137,7 +143,8 @@ func TestGetURL_NotFound(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	// Настраиваем мок - URL не найден
 	store.On("Get", "nonexistent").Return("", false, false)
@@ -162,7 +169,8 @@ func TestGetURL_EmptyID(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	req := &proto.GetURLRequest{
 		Id: "",

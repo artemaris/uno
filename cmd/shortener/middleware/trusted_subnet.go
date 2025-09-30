@@ -3,7 +3,17 @@ package middleware
 import (
 	"net"
 	"net/http"
+	"sync"
 )
+
+// TrustedSubnetCache кеширует распарсенные подсети
+type TrustedSubnetCache struct {
+	subnet string
+	net    *net.IPNet
+	mutex  sync.RWMutex
+}
+
+var subnetCache = &TrustedSubnetCache{}
 
 // TrustedSubnetMiddleware проверяет, что IP адрес клиента находится в доверенной подсети
 func TrustedSubnetMiddleware(trustedSubnet string) func(http.Handler) http.Handler {
@@ -27,8 +37,8 @@ func TrustedSubnetMiddleware(trustedSubnet string) func(http.Handler) http.Handl
 				}
 			}
 
-			// Парсим доверенную подсеть
-			_, trustedNet, err := net.ParseCIDR(trustedSubnet)
+			// Получаем кешированную подсеть или парсим новую
+			trustedNet, err := getCachedSubnet(trustedSubnet)
 			if err != nil {
 				http.Error(w, "Invalid trusted subnet configuration", http.StatusInternalServerError)
 				return
@@ -50,4 +60,29 @@ func TrustedSubnetMiddleware(trustedSubnet string) func(http.Handler) http.Handl
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// getCachedSubnet возвращает кешированную подсеть или парсит новую
+func getCachedSubnet(subnet string) (*net.IPNet, error) {
+	subnetCache.mutex.RLock()
+	if subnetCache.subnet == subnet && subnetCache.net != nil {
+		net := subnetCache.net
+		subnetCache.mutex.RUnlock()
+		return net, nil
+	}
+	subnetCache.mutex.RUnlock()
+
+	// Парсим подсеть
+	_, trustedNet, err := net.ParseCIDR(subnet)
+	if err != nil {
+		return nil, err
+	}
+
+	// Кешируем результат
+	subnetCache.mutex.Lock()
+	subnetCache.subnet = subnet
+	subnetCache.net = trustedNet
+	subnetCache.mutex.Unlock()
+
+	return trustedNet, nil
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
+	"os"
 	"uno/api/proto"
 
 	"google.golang.org/grpc"
@@ -11,10 +13,19 @@ import (
 )
 
 func main() {
+	// Парсим флаги командной строки
+	serverAddr := flag.String("addr", "localhost:9090", "gRPC server address")
+	flag.Parse()
+
+	// Проверяем переменную окружения
+	if envAddr := os.Getenv("GRPC_SERVER_ADDR"); envAddr != "" {
+		*serverAddr = envAddr
+	}
+
 	// Подключаемся к gRPC серверу
-	conn, err := grpc.NewClient("localhost:9090", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(*serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatalf("Failed to connect to %s: %v", *serverAddr, err)
 	}
 	defer conn.Close()
 

@@ -15,6 +15,7 @@ import (
 	"uno/cmd/shortener/grpc"
 	"uno/cmd/shortener/handlers"
 	"uno/cmd/shortener/middleware"
+	"uno/cmd/shortener/service"
 	"uno/cmd/shortener/storage"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -88,6 +89,9 @@ func main() {
 			store = storage.NewInMemoryStorage()
 		}
 	}
+
+	// Создаем сервис
+	svc := service.NewService(cfg, store, logger)
 
 	// Запускаем worker для удаления URL если поддерживается
 	if _, ok := store.(*storage.PostgresStorage); ok {
@@ -171,7 +175,7 @@ func main() {
 			)
 
 			// Создаем gRPC сервис
-			grpcService := grpc.NewServer(cfg, store, logger)
+			grpcService := grpc.NewServer(svc, logger)
 			proto.RegisterShortenerServiceServer(grpcSrv, grpcService)
 
 			// Запускаем gRPC сервер

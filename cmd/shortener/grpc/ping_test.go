@@ -5,6 +5,7 @@ import (
 	"testing"
 	"uno/api/proto"
 	"uno/cmd/shortener/config"
+	"uno/cmd/shortener/service"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -16,7 +17,8 @@ func TestPing_Success(t *testing.T) {
 	}
 	store := &MockStorage{}
 	logger := zap.NewNop()
-	server := NewServer(cfg, store, logger)
+	svc := service.NewService(cfg, store, logger)
+	server := NewServer(svc, logger)
 
 	req := &proto.PingRequest{}
 	resp, err := server.Ping(context.Background(), req)
